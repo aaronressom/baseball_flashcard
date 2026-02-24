@@ -107,9 +107,9 @@ html, body {
 }
 
 .team-card:hover {
-  transform: translateY(-6px);
-  box-shadow: var(--shadow-lg);
-  border-color: var(--border);
+  transform: translateY(-4px);
+  border-color: var(--accent);
+  box-shadow: 0 12px 24px -8px rgba(59, 130, 246, 0.6)
 }
 
 .team-card-name {
@@ -172,8 +172,9 @@ html, body {
 }
 
 .team-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4);
+  transform: translateY(-4px);
+  border-color: var(--accent);
+  box-shadow: 0 12px 24px -8px rgba(59, 130, 246, 0.6);
 }
 
 /* --- Premium Velocity Slider --- */
@@ -331,9 +332,9 @@ input[type="range"]#minVelocity::-moz-range-thumb:hover {
 }
 
 .mini-card:hover {
-  border-color: var(--border);
+  border-color: var(--accent);
   transform: translateY(-4px);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 12px 24px -8px rgba(59, 130, 246, 0.6) !important;
 }
 
 .mini-card-order {
@@ -671,6 +672,7 @@ input[type="range"]#minVelocity::-moz-range-thumb:hover {
   text-align: center;
 }
 
+
 /* Overlays & Modals */
 .info-overlay, .settings-overlay {
   position: fixed;
@@ -739,4 +741,11 @@ input[type="range"]#minVelocity::-moz-range-thumb:hover {
   body * { visibility: hidden; }
   #print-container, #print-container *, #lineup-print-container, #lineup-print-container * { visibility: visible; }
   #print-container, #lineup-print-container { position: absolute; left: 0; top: 0; width: 100%; }
+}
+
+.team-btn:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent);
+  /* The glowing blue shadow */
+  box-shadow: 0 12px 24px -8px rgba(59, 130, 246, 0.6); 
 }
