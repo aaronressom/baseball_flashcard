@@ -378,7 +378,7 @@ async loadDataRange(startDate, endDate, minVelocity = 0) {
 return createElement('div', { className: 'team-select-screen' },
       createElement('h1', {}, 'Filter Trackman Data'),
       createElement('p', { style: { 'margin-bottom': '20px', opacity: '0.8' } },
-        'Adjust velocity and select a timeframe'
+        'Adjust the Velocity and Select a Timeframe'
       ),
       
       createElement('div', {
@@ -412,7 +412,7 @@ return createElement('div', { className: 'team-select-screen' },
               createElement('label', { style: { display: 'block', fontSize: '12px', marginBottom: '5px', color: '#666' } }, 'Start Date'),
               createElement('input', {
                 id: 'startDate', type: 'date',
-                value: '2024-05-17', // Defaulting to a known 2024 date so you can test it easily
+                // Default value removed so it starts blank!
                 style: { width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', cursor: 'pointer' }
               })
             ),
@@ -420,19 +420,24 @@ return createElement('div', { className: 'team-select-screen' },
               createElement('label', { style: { display: 'block', fontSize: '12px', marginBottom: '5px', color: '#666' } }, 'End Date'),
               createElement('input', {
                 id: 'endDate', type: 'date',
-                value: '2024-05-19',
+                // Default value removed so it starts blank!
                 style: { width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', cursor: 'pointer' }
               })
             )
           ),
-          
           createElement('button', {
             className: 'team-btn', style: { width: '100%', padding: '12px', fontSize: '16px' },
             onclick: () => {
               const minVel = document.getElementById('minVelocity').value;
-              // FIXED: Leave the dashes alone! The HTML calendar outputs exactly what Trackman needs.
               const startRaw = document.getElementById('startDate').value;
               const endRaw = document.getElementById('endDate').value;
+              
+              // Safety Check: Prevent the 502 crash if they forget to pick dates
+              if (!startRaw || !endRaw) {
+                  alert("Please select both a Start Date and an End Date before loading.");
+                  return; // Stops the function here so it doesn't break the server
+              }
+
               this.loadDataRange(startRaw, endRaw, minVel);
             }
           }, 'Load Custom Range')
@@ -464,12 +469,43 @@ return createElement('div', { className: 'team-select-screen' },
   
   renderTeamSelect() {
     const teams = Object.keys(TEAMS_DATA);
+    
+    // --- ERROR/EMPTY DATA LOGIC ---
     if (teams.length === 0) {
+      let errorMessage = 'No team data found for these dates.';
+      
+      if (METADATA && METADATA.startDate && METADATA.endDate) {
+        // Strip out the dashes to turn them into pure numbers (e.g., "2024-05-19" becomes 20240519)
+        const startNum = parseInt(METADATA.startDate.replace(/-/g, ''), 10);
+        const endNum = parseInt(METADATA.endDate.replace(/-/g, ''), 10);
+
+        // 1. Check if they went back in time!
+        if (startNum > endNum) {
+          errorMessage = 'Invalid Time Selection: No team data.';
+        } 
+        // 2. If time flows normally, check if it's the offseason
+        else {
+          const monthStr = METADATA.startDate.includes('-') 
+            ? METADATA.startDate.split('-')[1] 
+            : METADATA.startDate.substring(4, 6);
+          
+          const month = parseInt(monthStr, 10);
+          
+          // Atlantic League season is ~April (4) to October (10)
+          if (month < 4 || month > 10) {
+            errorMessage = 'Out of Season: No team data.';
+          }
+        }
+      }
+
       return createElement('div', { className: 'team-select-screen' },
-        createElement('p', {}, 'No team data.'),
-        createElement('button', { className: 'team-btn', onclick: () => this.showDateSelect() }, 'Back')
+        createElement('h1', {}, 'No Data'),
+        createElement('p', { style: { fontSize: '20px', fontWeight: 'bold', color: '#d9534f', margin: '20px 0' } }, errorMessage),
+        createElement('button', { className: 'team-btn', onclick: () => this.showDateSelect() }, 'Back to Calendar')
       );
     }
+    // ----------------------------------
+
     const teamButtons = teams.map(t => {
       const playerCount = TEAMS_DATA[t].length;
       const totalPitches = TEAMS_DATA[t].reduce((sum, b) => sum + (b.stats?.totalPitches || 0), 0);
@@ -487,6 +523,7 @@ return createElement('div', { className: 'team-select-screen' },
         )
       );
     });
+    
     return createElement('div', { className: 'team-select-screen' },
       createElement('div', { className: 'team-select-header' },
         createElement('h1', {}, 'Select a Team'),
@@ -496,6 +533,7 @@ return createElement('div', { className: 'team-select-screen' },
       createElement('div', { className: 'team-grid' }, ...teamButtons)
     );
   }
+
   renderLineup() {
     const lineup = TEAMS_DATA[this.selectedTeam];
     const cards = lineup.map((batter, i) => {
