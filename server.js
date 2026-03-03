@@ -519,7 +519,7 @@ function getPitchAbbreviation(pitchType) {
 }
 
 // API route handler for teams/range
-/*const teamsRangeHandler = async (req, res) => {
+const teamsRangeHandler = async (req, res) => {
   try {
     // (Task for Velocity Filter): #1 first change for the velocity filter logic is to add the minVelocity to the extracted query parameters.
     const { startDate, endDate, minVelocity } = req.query;
@@ -615,8 +615,8 @@ function getPitchAbbreviation(pitchType) {
     console.error('Error:', error.message);
     res.status(500).json({ error: 'Failed to fetch data', details: error.message });
   }
-}; */
-
+}; 
+/*
 // -------- Angela (2/25) -----
 
 const teamsRangeHandler = async (req, res) => {
@@ -748,6 +748,7 @@ const teamsRangeHandler = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch data', details: error.message });
   }
 };
+*/
 
 // helper function to get all dates between two dates
 function getDatesInRange(startDateStr, endDateStr) {
