@@ -10,7 +10,7 @@ app.use(express.static('.'));
 // SLUGGER API Configuration
 const SLUGGER_CONFIG = {
   baseUrl: process.env.SLUGGER_BASE_URL || "https://1ywv9dczq5.execute-api.us-east-2.amazonaws.com/ALPBAPI",
-  apiKey: process.env.SLUGGER_API_KEY || "ojgvHrY7Pu4qoE4GDsmxJ1TPZnYa9qwfL9fnI072"
+  apiKey: process.env.SLUGGER_API_KEY
 };
 
 // Cache for player and team lookups

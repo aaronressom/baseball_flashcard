@@ -142,7 +142,15 @@ const DATES_WITH_DATA = new Set([
 //new:
 const BASE_URL = "https://1ywv9dczq5.execute-api.us-east-2.amazonaws.com/ALPBAPI";
 
-async function fetchPitchesByDateRange(startDateStr, endDateStr) {
+async function fetchPitchesByDateRange(startDateStr, endDateStr) { 
+  const cacheKey = `${startDateStr}_${endDateStr}`;
+
+  if (pitchDataCache.has(cacheKey)) {
+    const cached = pitchDataCache.get(cacheKey);
+    console.log(`✅ Cache hit: returning ${cached.length} pitches for ${startDateStr} to ${endDateStr}`);
+    return cached;
+  }
+
     console.log(`Fetching date range from SLUGGER API: ${startDateStr} to ${endDateStr}`);
     
     try {
@@ -264,6 +272,7 @@ function assessBuntThreat(batter) {
 // (Task for VF): #4 fourth change was I added the minVelocity as a parameter to filter out pitches that don't meet 
 // the minimum velocity requirement before processing them into teams.
 function transformPitchDataToTeams(pitchData, existingData = {}, minVelocity = 0) {
+
   const teamsData = { ...existingData }, batterMap = new Map();
   Object.entries(teamsData).forEach(([team, batters]) => {
     batters.forEach(batter => batterMap.set(`${team}_${batter.batter}`, batter));
@@ -342,9 +351,11 @@ function transformPitchDataToTeams(pitchData, existingData = {}, minVelocity = 0
       currentPA.result = pitch.play_result;
 
       // Track sequences that get OUTS (any type of out)
-      const isOut = ['Out', 'Strikeout', 'FieldersChoice', 'DoublePlay', 'TriplePlay', 'Flyout', 'Groundout', 'Lineout', 'Popout'].some(outType =>
-        pitch.play_result.includes(outType) || pitch.k_or_bb === 'Strikeout'
-      );
+      const isOut = 
+        pitch.play_result === 'Out' ||
+        pitch.play_result === 'FieldersChoice' ||
+        pitch.play_result === 'Sacrifice' ||
+        pitch.k_or_bb === 'Strikeout';
 
       if (isOut && currentPA.pitches.length >= 2) {
         // Get the last 2-3 pitches that led to this out
@@ -518,105 +529,6 @@ function getPitchAbbreviation(pitchType) {
   return abbrev[pitchType] || 'FB';
 }
 
-// API route handler for teams/range
-const teamsRangeHandler = async (req, res) => {
-  try {
-    // (Task for Velocity Filter): #1 first change for the velocity filter logic is to add the minVelocity to the extracted query parameters.
-    const { startDate, endDate, minVelocity } = req.query;
-
-    // (Task for Dynamic Time Period Filtering (ALPB Logic)):
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth(); // 0 is january, 11 is december
-
-    // (Task for DTPF): #1 first is to determine the target season year using if/else
-    let targetYear;
-      if (currentMonth < 3) {
-        // so if we are in jan, feb, or march (0, 1, 2), the ALPB season hasnt started yet.
-        // so we need to look at last year's data:
-        targetYear = currentYear - 1;
-      } else {
-        // if we are in any other month like april thru december, we want to look at the current year's data
-        targetYear = currentYear;
-      }
-      
-    // (Task for DTPF): #2 second this is to define some sort of safety net start date for the ALPB
-    // Start is always going to be april 15th of our target year in order to catch the alpb opening day
-    // even it starts on different days each year, this will ensure we are always capturing the start of the season. 
-    // We can adjust this date as needed if we find that there are games being missed at the beginning of the season.
-    // alpb start dates for the last 4 years (april, 25, 25, 28, 21) so april 15th is a safe bet to always be before the season starts.
-    const defaultStart = `${targetYear}0415`; // April 15th of target year
-    
-    // (Task for DTPF): #3 determine the end date
-    let defaultEnd;
-      // if its before april (jan - march) or after october (nov-dec) its the Off-Season.
-      if (currentMonth > 3 || currentMonth < 9) {
-        // it the offeseason so cap the search at oct 15 to safley include the ALPB championship.
-        defaultEnd = `${targetYear}1015`; // October 15th of target year
-      } else {
-        // we are actively in the season (April through October). 
-        // Use Today's exact date
-        const currentMonthFormatted = String(currentMonth + 1).padStart(2, '0');
-        const currentDayFormatted = String(today.getDate()).padStart(2, '0');
-        defaultEnd = `${targetYear}${currentMonthFormatted}${currentDayFormatted}`;
-      }
-    
-    // (Task for DTPF): #4 apply the coaches input (like use their dates if they types them in)
-    let finalStartDate;
-    if (startDate) {
-      finalStartDate = startDate;
-    } else {
-      finalStartDate = defaultStart;
-    }
-
-    let finalEndDate;
-    if (endDate) {
-      finalEndDate = endDate;
-    } else {
-      finalEndDate = defaultEnd;
-    }
-
-    //clean log
-    console.log(`\nFetching ${finalStartDate} to ${finalEndDate}`);
-    // Commented this out b/c this is acting like a strict error check.
-    // If the frontend sends blank dates (e.g., clicking "Full Season"), 
-    // we want to fall back to the default dates below instead of just crashing the app: 
-    // if (!startDate || !endDate) return res.status(400).json({ error: 'startDate and endDate required' });
-    
-    // NEW LOGIC: Only add dashes if they don't already exist!
-    const formatForApi = (dateStr) => {
-        if (!dateStr || dateStr.includes('-')) return dateStr;
-        return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
-    };
-    
-    const formattedStart = formatForApi(finalStartDate);
-    const formattedEnd = formatForApi(finalEndDate);
-
-    const pitches = await fetchPitchesByDateRange(formattedStart, formattedEnd);
-    
-    // (Task for VF): #2 second change is adding a safe parsing logic to convert the minVelocity string into a number (defaulting to 0).
-    let parsedMinVelocity;
-    if (minVelocity) {
-      parsedMinVelocity = parseFloat(minVelocity);
-    } else {
-      parsedMinVelocity = 0;
-    }
-
-    // (Task for VF): #3 third change is to passed the parsedMinVelocity to the transformPitchDataToTeams function, which will now filter 
-    // out any pitches that don't meet the minimum velocity requirement before processing them into teams.
-    const teamsData = transformPitchDataToTeams(pitches, {}, parsedMinVelocity);
-
-    const teamCount = Object.keys(teamsData).length;
-    const playerCount = Object.values(teamsData).reduce((sum, team) => sum + team.length, 0);
-    console.log(`✅ Complete: ${teamCount} teams, ${playerCount} players\n`);
-
-    res.json({ teamsData, metadata: { startDate: finalStartDate, endDate: finalEndDate, filesProcessed: pitches.length, filesSkipped: 0 } });
-  } catch (error) {
-    console.error('Error:', error.message);
-    res.status(500).json({ error: 'Failed to fetch data', details: error.message });
-  }
-}; 
-/*
 // -------- Angela (2/25) -----
 
 const teamsRangeHandler = async (req, res) => {
@@ -625,21 +537,22 @@ const teamsRangeHandler = async (req, res) => {
     
     // check if the selected date range is in the future
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
     
     if (endDate) {
       // parse the end date (handle both YYYYMMDD and YYYY-MM-DD formats)
       let endDateObj;
-      if (endDate.includes('-')) {
-        endDateObj = new Date(endDate);
-      } else {
-        const year = endDate.substring(0, 4);
-        const month = endDate.substring(4, 6);
-        const day = endDate.substring(6, 8);
-        endDateObj = new Date(`${year}-${month}-${day}`);
-      }
-      
-      endDateObj.setHours(0, 0, 0, 0);
+
+
+    const mdyMatch = endDate.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    const normalized = mdyMatch 
+      ? `${mdyMatch[3]}-${mdyMatch[1]}-${mdyMatch[2]}`
+      : endDate.includes('-') 
+      ? endDate 
+      : `${endDate.substring(0,4)}-${endDate.substring(4,6)}-${endDate.substring(6,8)}`;      
+    
+      endDateObj = new Date(normalized + 'T00:00:00Z');
+      //endDateObj.setHours(0, 0, 0, 0);
       
       if (endDateObj > today) {
         console.log(`Future date detected: ${endDate}`);
@@ -687,8 +600,14 @@ const teamsRangeHandler = async (req, res) => {
     console.log(`\nFetching date range: ${finalStartDate} to ${finalEndDate}`);
     
     // format dates for API (add dashes if needed)
-    const formatForApi = (dateStr) => {
+   const formatForApi = (dateStr) => {
       if (!dateStr) return null;
+
+      const mdyMatch = dateStr.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if (mdyMatch) {
+        return `${mdyMatch[3]}-${mdyMatch[1]}-${mdyMatch[2]}`;
+      }
+
       if (dateStr.includes('-')) return dateStr;
       if (dateStr.length === 8) {
         return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
@@ -739,7 +658,7 @@ const teamsRangeHandler = async (req, res) => {
         startDate: finalStartDate, 
         endDate: finalEndDate, 
         filesProcessed: pitches.length,
-        pitchesFilteredByVelocity: pitches.length - countPitchesByVelocity(pitches, parsedMinVelocity)
+        pitchesFilteredByVelocity: countPitchesByVelocity(pitches, parsedMinVelocity)
       } 
     });
     
@@ -748,19 +667,22 @@ const teamsRangeHandler = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch data', details: error.message });
   }
 };
-*/
+
 
 // helper function to get all dates between two dates
 function getDatesInRange(startDateStr, endDateStr) {
   const dates = [];
-  const start = new Date(startDateStr);
-  const end = new Date(endDateStr);
+  const start = new Date(startDateStr + 'T00:00:00Z'); 
+  const end = new Date(endDateStr + 'T00:00:00Z');
   
   const current = new Date(start);
   while (current <= end) {
-    const dateStr = current.toISOString().split('T')[0];
-    dates.push(dateStr);
-    current.setDate(current.getDate() + 1);
+    const year = current.getUTCFullYear();
+    const month = String(current.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(current.getUTCDate()).padStart(2, '0');
+
+    dates.push(`${year}-${month}-${day}`);
+    current.setUTCDate(current.getUTCDate() + 1);
   }
   
   return dates;

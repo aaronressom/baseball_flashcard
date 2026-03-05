@@ -54,10 +54,26 @@ function createElement(tag, props = {}, ...children) {
   });
   return el;
 }
-function createPitchZone(zones, handedness) {
+function createPitchZone(zones, handedness, allowedZones = null) {
   const safeZones = Array.isArray(zones) ? zones : [];
   // Apply pitch filtering based on settings
   let filteredZones = safeZones;
+
+  // if the weakness slider has restricted zones, only show those
+  if (allowedZones !== null) {
+    if (allowedZones.length > 0) {
+      // Filter to only circles in vulnerable zones
+      filteredZones = filteredZones.filter(z => allowedZones.includes(z.zone));
+    } else {
+      // No vulnerable zones identified — at strict/balanced, show only good pitches
+      // At broad (threshold < 50), show everything
+      const threshold = CURRENT_SETTINGS.vulnerableZoneThreshold;
+      if (threshold >= 50) {
+        filteredZones = filteredZones.filter(z => z.good === true);
+      }
+    }
+  }
+
   if (CURRENT_SETTINGS.showOnlyGoodPitches) {
     filteredZones = filteredZones.filter(z => z.good === true);
   } else if (CURRENT_SETTINGS.showOnlyBadPitches) {
@@ -117,10 +133,15 @@ function createBatterGraphic(handedness, batterName, pitchZones) {
     )
   );
 }
+
 function createTendencies(tendencies, stats, zoneAnalysis, powerSequence) {
 const stripPercents = (text) => {
     if (typeof text !== 'string') return text;
-    return text.replace(/\([^)]*%[^)]*\)/g, '').replace(/\d+\s*%/g, '').replace(/\s{2,}/g, ' ').trim();
+    return text
+      .replace(/\((\d+)\/(\d+)\s*=\s*\d+%\)/g, '($1 of $2 outs)')
+      .replace(/\d+\s*%/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
   };
 
   const safeStats = stats || {};
@@ -134,40 +155,82 @@ const stripPercents = (text) => {
   const vulnerableZones = [];
   const hotZones = [];
   if (zoneAnalysis) {
+    const zoneScores = {};
+
     Object.entries(zoneAnalysis).forEach(([zone, stats]) => {
-      
-      // TODO for @Angela: Weakness Bucket Algorithm goes here
-      
-      if (stats.swings > CURRENT_SETTINGS.vulnerableZoneMinSwings) { 
-        const whiffPct = (stats.whiffs / stats.swings * 100);
-        const weakContactPct = stats.contact > 0 ? (stats.weakContact / stats.contact * 100) : 0;
-        const foulPct = (stats.fouls / stats.swings * 100);
-        
-        // Angela: This is the placeholder math. Replace with your statistical logic!
-        const combinedVulnerability = whiffPct + (weakContactPct * 0.5) + (foulPct * 0.3);
-        
-        // This links your math to the UI slider Aaron built:
-        if (combinedVulnerability > vulnThreshold) {
-          vulnerableZones.push({ zone, score: combinedVulnerability.toFixed(0) });
-        }
-        
-        const hardHitPct = stats.contact > 0 ? (stats.hardHits / stats.contact * 100) : 0;
-        if (hardHitPct > CURRENT_SETTINGS.hotZoneHardHitThreshold && stats.hardHits >= CURRENT_SETTINGS.hotZoneMinHardHits) {
-          hotZones.push({ zone, hardHitPct: hardHitPct.toFixed(0) });
-        }
-      }
+
+      if (stats.swings < CURRENT_SETTINGS.vulnerableZoneMinSwings) return;
+
+      const whiff_percent = (stats.whiffs / stats.swings) * 100;
+      const chase_percent = (stats.fouls / stats.swings) * 100;
+      const weakConstant_percent = stats.contact > 0 ? (stats.weakContact / stats.contact) * 100 : 0;
+      const hardHit_percent = stats.contact > 0 ? (stats.hardHits / stats.contact) * 100 : 0;
+
+      zoneScores[zone] = { whiff_percent, chase_percent, weakConstant_percent, hardHit_percent, stats };
     });
+
+    const zones = Object.keys(zoneScores);
+
+    if (zones.length > 0) {
+      const getRank = (metric) => {
+        const values = zones.map(z => zoneScores[z][metric]);
+        const sorted = [...values].sort((a, b) => b - a);
+        const ranks = {};
+
+        zones.forEach(z => {
+          const idx = sorted.findIndex(v => Math.abs(v - zoneScores[z][metric]) < 0.0001);
+          ranks[z] = zones.length === 1 ? 100 : ((idx === -1 ? 0 : idx) / (zones.length - 1)) * 100;
+        });
+        return ranks;
+      };
+    
+
+      const whiffRanks = getRank('whiff_percent');
+      const chaseRanks = getRank('chase_percent');
+      const weakContactRanks = getRank('weakConstant_percent');
+      const hardHitRanks = getRank('hardHit_percent');
+
+      zones.forEach(zone => {
+        const vulnerabilityScore = (
+          whiffRanks[zone] * 0.45 +
+          weakContactRanks[zone] * 0.35 +
+          chaseRanks[zone] * 0.20
+        );
+
+        let severity = null;
+
+        if (vulnerabilityScore >= 80) severity = 'CRITICAL';
+        else if (vulnerabilityScore >= 65) severity = 'MAJOR';
+        else if (vulnerabilityScore >= 40) severity = 'MODERATE';
+
+        if (severity) {
+          vulnerableZones.push({zone, score : vulnerabilityScore.toFixed(0), severity})
+        }
+
+        // hot zone check
+        if (hardHitRanks[zone] >= CURRENT_SETTINGS.hotZoneHardHitThreshold && 
+          zoneScores[zone].stats.hardHits >= CURRENT_SETTINGS.hotZoneMinHardHits) {
+          hotZones.push({zone, hardHitPct: zoneScores[zone].hardHit_percent.toFixed(0)});
+        }
+      });
+    }
   }
   
   vulnerableZones.sort((a, b) => b.score - a.score);
   hotZones.sort((a, b) => b.hardHitPct - a.hardHitPct);
+
+  const filteredVulnerableZones = vulnerableZones.filter(z => z.score >= vulnThreshold);
+
+  if (app) {
+    app.allowedZones = filteredVulnerableZones.map(z => z.zone);
+  }
   
   let firstPitchText = stripPercents(tendencies?.firstStrike || `Swings ${firstPitchSwingRate} on first pitch`);
   let sprayText = stripPercents(tendencies?.spray || 'All fields');
   const cleanedPowerSequence = stripPercents(powerSequence || 'Insufficient data');
 
   // The UI Slider (Aaron part)
-const confidenceSlider = app ? createElement('div', { style: { padding: '12px', background: '#f8fafc', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '12px' } },
+  const confidenceSlider = app ? createElement('div', { style: { padding: '12px', background: '#f8fafc', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '12px' } },
     createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: '8px' } },
       createElement('span', { style: { fontSize: '14px', fontWeight: '700', color: 'var(--text)' } }, 'Weakness Confidence'),
       // Added an ID here so we can update the number smoothly
@@ -179,16 +242,15 @@ const confidenceSlider = app ? createElement('div', { style: { padding: '12px', 
       className: 'setting-slider',
       style: { width: '100%', cursor: 'pointer' },
       oninput: (e) => {
-         // 1. Instantly change the number text while dragging (NO screen reload!)
-         const display = document.getElementById('slider-value-display');
-         if (display) display.innerText = e.target.value;
-      },
-      onchange: (e) => {
-         // 2. ONLY update the app's settings when the coach lets go of the mouse
-         app.updateSetting('vulnerableZoneThreshold', parseInt(e.target.value, 10));
+        app.updateSetting('vulnerableZoneThreshold', parseInt(e.target.value, 10));
       }
     }),
-    createElement('div', { style: { fontSize: '11px', color: 'var(--muted)', textAlign: 'center', marginTop: '4px' } }, `Slide Left = Broad | Slide Right = Strict`)
+
+    createElement('div', { style: { fontSize: '11px', color: 'var(--muted)', textAlign: 'center', marginTop: '4px' } },
+      vulnThreshold >= 75 ? 'Strict — Critical only' :
+      vulnThreshold >= 50 ? 'Balanced — Critical + Major' :
+      'Broad — All weaknesses shown'
+    )
   ) : null;
 
   return createElement('div', { className: 'info-section' },
@@ -197,11 +259,11 @@ const confidenceSlider = app ? createElement('div', { style: { padding: '12px', 
       createElement('h4', {}, 'First-Pitch Approach'),
       createElement('div', { className: 'power-sequence-text' }, firstPitchText)
     ),
-    vulnerableZones.length > 0 ? createElement('div', { className: 'power-sequence vulnerable-zone' },
-      createElement('h4', {}, 'Vulnerable Zones'),
-      createElement('div', { className: 'power-sequence-text' },
-        vulnerableZones.slice(0, 2).map(z => z.zone).join(', ') || 'Calculating...')
-    ) : null,
+    filteredVulnerableZones.length > 0 ? createElement('div', { className: 'power-sequence vulnerable-zone' },
+    createElement('h4', {}, 'Vulnerable Zones'),
+    createElement('div', { className: 'power-sequence-text' },
+    filteredVulnerableZones.slice(0, 2).map(z => `${z.zone} (${z.score})`).join(', '))
+) : null,
     hotZones.length > 0 ? createElement('div', { className: 'power-sequence hot-zone' },
       createElement('h4', {}, 'Hot Zones (Avoid)'),
       createElement('div', { className: 'power-sequence-text' },
@@ -228,6 +290,7 @@ const confidenceSlider = app ? createElement('div', { style: { padding: '12px', 
     )
   );
 }
+
 class FlashcardApp {
   constructor(container) {
     this.container = container;
@@ -268,7 +331,7 @@ class FlashcardApp {
       )
     );
     const pitchSection = createElement('div', { className: 'pitch-zone-section' },
-      createPitchZone(batter.pitchZones || [], batter.handedness)
+      createPitchZone(batter.pitchZones || [], batter.handedness, app?.allowedZones || null)
     );
     const infoSection = createTendencies(batter.tendencies, batter.stats, batter.zoneAnalysis, batter.powerSequence, null);
     const widget = createElement('div', { className: 'widget print-widget' },
@@ -760,9 +823,17 @@ createElement('div', {},
         )
       ) : null,
       this.showSettingsPanel ? this.renderSettingsPanel() : null,
-      createElement('div', { className: 'pitch-zone-section' }, createPitchZone(data.pitchZones || [], data.handedness)),
-      createBatterGraphic(data.handedness, data.batter, data.pitchZones),
-      createTendencies(data.tendencies, data.stats, data.zoneAnalysis, data.powerSequenc, this)
+      (() => {
+        const tendenciesEl = createTendencies(data.tendencies, data.stats, data.zoneAnalysis, data.powerSequence, this);
+        const pitchZoneEl = createElement('div', { className: 'pitch-zone-section' }, createPitchZone(data.pitchZones || [], data.handedness, app?.allowedZones || null));
+        const batterEl = createBatterGraphic(data.handedness, data.batter, data.pitchZones);
+
+        const frag = document.createDocumentFragment();
+        frag.appendChild(pitchZoneEl);
+        frag.appendChild(batterEl);
+        frag.appendChild(tendenciesEl);
+        return frag;
+      }) ()
     );
   }
   render() {
@@ -777,8 +848,9 @@ createElement('div', {},
     this.container.appendChild(content);
   }
 }
+let app;
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => new FlashcardApp(document.getElementById('app')));
+  document.addEventListener('DOMContentLoaded', () => {app =  new FlashcardApp(document.getElementById('app')); });
 } else {
-  new FlashcardApp(document.getElementById('app'));
+  app = new FlashcardApp(document.getElementById('app'));
 }
