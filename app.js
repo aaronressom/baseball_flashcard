@@ -490,11 +490,21 @@ fetchSmartData(days) {
           customMsg = `Loading the last ${days} days...`;
       }
       
-      // Retain the dates in the calendar memory
+      //TODO: KEEP!!! Retain the dates in the calendar memory: (will revert back once the dynamic query is back online)
       this.lastStartDate = startStr;
       this.lastEndDate = endStr;
       this.loadDataRange(startStr, endStr, maxVel, customMsg);
-  }
+
+      /*
+      else {
+          // Hardcode the 2025 ALPB Season boundaries since the dynamic query is offline, for checkpoint #1
+          
+          startStr = '2025-04-25';
+          endStr = '2025-09-18';
+          customMsg = 'Loading the 2025 Season...';
+        }
+      */ 
+}
 
   showDateSelect() { this.currentScreen = 'dateSelect'; this.render(); }
   showTeamSelect() { this.currentScreen = 'teamSelect'; this.selectedTeam = null; this.render(); }
@@ -585,8 +595,8 @@ fetchSmartData(days) {
             createElement('div', { style: { flex: 1 } },
               createElement('label', { style: { display: 'block', fontSize: '12px', marginBottom: '5px', color: '#666' } }, 'Start Date'),
               createElement('input', {
-                id: 'startDate', type: 'date',
-                value: this.lastStartDate || '', // <--- NEW: Injects saved memory, or stays blank if first load
+                id: 'startDate', type: 'date', //TODO: DELETE HARDCODED DATES ONCE THE DYNAMIC QUERY IS BACK ONLINE: 2025-04-25 to 2025-09-18
+                value: this.lastStartDate || '2025-04-25', // <--- NEW: Injects saved memory, or stays blank if first load
                 style: { width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', cursor: 'pointer' }
               })
             ),
@@ -594,7 +604,7 @@ fetchSmartData(days) {
               createElement('label', { style: { display: 'block', fontSize: '12px', marginBottom: '5px', color: '#666' } }, 'End Date'),
               createElement('input', {
                 id: 'endDate', type: 'date',
-                value: this.lastEndDate || '', // <--- NEW: Injects saved memory, or stays blank if first load
+                value: this.lastEndDate || '2025-09-18', // <--- NEW: Injects saved memory, or stays blank if first load
                 style: { width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', cursor: 'pointer' }
               })
             )
