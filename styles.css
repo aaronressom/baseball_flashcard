@@ -530,6 +530,7 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   z-index: 1;
 }
 
+/* Dr d said remove the inner box
 .pitch-zone::before {
   content: '';
   position: absolute;
@@ -539,6 +540,7 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   pointer-events: none;
   background: rgba(255, 255, 255, 0.05);
 }
+*/
 
 .pitch-circle {
   position: absolute;

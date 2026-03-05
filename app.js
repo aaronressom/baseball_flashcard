@@ -230,6 +230,68 @@ const stripPercents = (text) => {
   const cleanedPowerSequence = stripPercents(powerSequence || 'Insufficient data');
 
   // The UI Slider (Aaron part)
+
+  // Helper to determine the text AND the color based on the value
+  const getConfidenceState = (val) => {
+      if (val >= 75) return { text: 'Strict (Critical Only)', color: '#22c55e' }; // Green
+      if (val >= 50) return { text: 'Balanced (Critical + Major)', color: '#f59e0b' }; // Amber/Yellow
+      return { text: 'Broad (All Weaknesses)', color: '#ef4444' }; // Red
+  };
+
+  // Grab the initial state so it renders correctly on load
+  const initialState = getConfidenceState(vulnThreshold);
+
+  // The UI Slider (Aaron part)
+  const confidenceSlider = app ? createElement('div', { style: { padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '16px', boxShadow: 'var(--shadow-sm)' } },
+    createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' } },
+      createElement('span', { style: { fontSize: '15px', fontWeight: '700', color: 'var(--text)' } }, 'Weakness Confidence'),
+      // Sleek Pill Badge with dynamic background color
+      createElement('span', { 
+        id: 'slider-value-display', 
+        style: { 
+          fontSize: '12px', 
+          fontWeight: '700', 
+          color: 'white', 
+          background: initialState.color, 
+          padding: '4px 10px', 
+          borderRadius: '12px', 
+          letterSpacing: '0.5px',
+          transition: 'background-color 0.2s ease' // Smooth fade between colors
+        } 
+      }, initialState.text)
+    ),
+    createElement('input', {
+      type: 'range', min: '0', max: '100', step: '1',
+      value: vulnThreshold,
+      className: 'setting-slider',
+      style: { 
+        width: '100%', 
+        cursor: 'pointer', 
+        accentColor: initialState.color, // Dynamic slider bar color
+        height: '6px',
+        outline: 'none',
+        transition: 'accent-color 0.2s ease' // Smooth fade for the slider bar
+      },
+      oninput: (e) => {
+        const val = parseInt(e.target.value, 10);
+        const newState = getConfidenceState(val);
+        
+        // 1. Update the text and color of the badge
+        const badge = document.getElementById('slider-value-display');
+        badge.innerText = newState.text;
+        badge.style.background = newState.color;
+        
+        // 2. Update the color of the slider bar itself
+        e.target.style.accentColor = newState.color;
+        
+        // 3. Feed the raw number to Angela's backend logic silently
+        app.updateSetting('vulnerableZoneThreshold', val);
+      }
+    })
+  ) : null;
+
+  // ------- CONFIDENCE SLIDER START OLD -------
+  /*
   const confidenceSlider = app ? createElement('div', { style: { padding: '12px', background: '#f8fafc', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '12px' } },
     createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: '8px' } },
       createElement('span', { style: { fontSize: '14px', fontWeight: '700', color: 'var(--text)' } }, 'Weakness Confidence'),
@@ -252,6 +314,8 @@ const stripPercents = (text) => {
       'Broad — All weaknesses shown'
     )
   ) : null;
+*/
+  // ------- CONFIDENCE SLIDER END -------
 
   return createElement('div', { className: 'info-section' },
     confidenceSlider,
