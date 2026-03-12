@@ -412,6 +412,12 @@ class FlashcardApp {
     const container = this.getPrintContainer('print-container');
     container.innerHTML = '';
     container.appendChild(this.buildPrintPage(batter, this.selectedTeam, this.selectedBatterIndex));
+
+    const printSize = Math.round(CURRENT_SETTINGS.pitchCircleSize * 2);
+    container.querySelectorAll('.pitch-zone').forEach(el => {
+      el.style.setProperty('--pitch-circle-size', `${printSize}px`)
+    });
+
     setTimeout(() => window.print(), 30);
   }
   printLineup() {
@@ -422,6 +428,12 @@ class FlashcardApp {
     lineup.forEach((batter, idx) => {
       container.appendChild(this.buildPrintPage(batter, this.selectedTeam, idx));
     });
+
+    const printSize = Math.round(CURRENT_SETTINGS.pitchCircleSize * 2);
+    container.querySelectorAll('.pitch-zone').forEach(el => {
+      el.style.setProperty('--pitch-circle-size', `${printSize}px`)
+    });
+
     setTimeout(() => window.print(), 30);
   }
   toggleInfo() {
