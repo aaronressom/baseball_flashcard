@@ -199,9 +199,9 @@ const stripPercents = (text) => {
 
         let severity = null;
 
-        if (vulnerabilityScore >= 80) severity = 'CRITICAL';
-        else if (vulnerabilityScore >= 65) severity = 'MAJOR';
-        else if (vulnerabilityScore >= 40) severity = 'MODERATE';
+        if (vulnerabilityScore <= 20) severity = 'CRITICAL';
+        else if (vulnerabilityScore <= 35) severity = 'MAJOR';
+        else if (vulnerabilityScore <= 60) severity = 'MODERATE';
 
         if (severity) {
           vulnerableZones.push({zone, score : vulnerabilityScore.toFixed(0), severity})
