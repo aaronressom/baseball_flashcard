@@ -610,7 +610,7 @@ fetchSmartData(days) {
             style: { width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '15px', backgroundColor: 'white', cursor: 'pointer' }
           },
             createElement('option', { value: 'All' }, 'All Pitches'),
-            createElement('option', { value: 'Fastballs' }, 'Fastballs Only (4S, 2S, CT, SI)'),
+            createElement('option', { value: 'Fastballs' }, 'Fastballs Only (4S, SI, FC)'),
             createElement('option', { value: 'Breaking' }, 'Breaking Balls Only (SL, CB)'),
             createElement('option', { value: 'Offspeed' }, 'Offspeed Only (CH, SP)')
           )

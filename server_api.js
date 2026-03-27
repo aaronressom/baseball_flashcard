@@ -526,9 +526,9 @@ app.get('/api/teams/range', async (req, res) => {
     }
 
     if (pitchGroup && pitchGroup !== 'All') {
-       const fastballs = ['Fastball', 'Four-Seam', 'TwoSeamFastball', 'Sinker', 'Cutter'];
-       const breaking = ['Slider', 'Curveball', 'KnuckleCurve', 'Sweeper']; 
-       const offspeed = ['Changeup', 'ChangeUp', 'Splitter', 'Knuckleball'];
+       const fastballs = ['Four-Seam', 'Sinker', 'Cutter'];
+       const breaking  = ['Slider', 'Curveball'];
+       const offspeed  = ['Changeup', 'ChangeUp', 'Splitter'];
        
        filteredPitches = filteredPitches.filter(p => {
           const pt = p.tagged_pitch_type || p.auto_pitch_type;

@@ -650,9 +650,9 @@ const teamsRangeHandler = async (req, res) => {
 
     // filter by pitch group if specified
     if (pitchGroup && pitchGroup !== 'All') {
-      const fastballs = ['Fastball', 'Four-Seam', 'TwoSeamFastball', 'Sinker', 'Cutter'];
-      const breaking  = ['Slider', 'Curveball', 'KnuckleCurve', 'Sweeper'];
-      const offspeed  = ['Changeup', 'ChangeUp', 'Splitter', 'Knuckleball'];
+      const fastballs = ['Four-Seam', 'Sinker', 'Cutter'];
+      const breaking  = ['Slider', 'Curveball'];
+      const offspeed  = ['Changeup', 'ChangeUp', 'Splitter'];
       pitches = pitches.filter(p => {
         const pt = p.tagged_pitch_type || p.auto_pitch_type;
         if (pitchGroup === 'Fastballs') return fastballs.includes(pt);
