@@ -823,3 +823,48 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   /* The glowing blue shadow */
   box-shadow: 0 12px 24px -8px rgba(59, 130, 246, 0.6); 
 }
+
+/* --- Pitch Filter Toggle Buttons --- */
+.pitch-filter-btn {
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px; /* Space between text and icon */
+}
+
+/* The selected, vibrant blue state */
+.pitch-filter-btn.active {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  color: white;
+  border: 1px solid transparent;
+  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+}
+
+/* The semi-grayed out, inactive state */
+.pitch-filter-btn.inactive {
+  background: #f1f5f9; 
+  color: #64748b; 
+  border: 1px solid #cbd5e1;
+  box-shadow: none;
+}
+
+.pitch-filter-btn.inactive:hover {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+/* Tooltip Icon styling */
+.pitch-info-icon {
+  font-weight: normal;
+  opacity: 0.8;
+  cursor: help;
+  font-size: 16px;
+}

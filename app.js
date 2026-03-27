@@ -561,7 +561,7 @@ fetchSmartData(days) {
     return createElement('div', { className: 'team-select-screen' },
       createElement('h1', {}, 'Batter Flashcard'),
       createElement('p', { style: { 'margin-bottom': '20px', opacity: '0.8' } },
-        'Start by Adjusting the Velocity and Selecting a Timeframe'
+        'Start by Adjusting the Velocity, Pitch Type, and Selecting a Timeframe'
       ),
       
       createElement('div', {
@@ -601,18 +601,64 @@ fetchSmartData(days) {
           ),
 
           // 1.5 Pitch Group Selector (Ryan Dull Feature)
+// 1.5 Pitch Group Selector (Ryan Dull Feature) - Button Version
         createElement('div', { style: { marginTop: '15px' } },
           createElement('label', { style: { display: 'block', 'margin-bottom': '10px', 'font-weight': 'bold', 'font-size': '16px' } }, 
             'Pitch Type Filter'
           ),
-          createElement('select', {
-            id: 'pitchGroup',
-            style: { width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '15px', backgroundColor: 'white', cursor: 'pointer' }
-          },
-            createElement('option', { value: 'All' }, 'All Pitches'),
-            createElement('option', { value: 'Fastballs' }, 'Fastballs Only (4S, SI, FC)'),
-            createElement('option', { value: 'Breaking' }, 'Breaking Balls Only (SL, CB)'),
-            createElement('option', { value: 'Offspeed' }, 'Offspeed Only (CH, SP)')
+          
+          // Hidden input to safely store the selected value for API calls
+          createElement('input', { type: 'hidden', id: 'pitchGroup', value: this.lastPitchGroup || 'All' }),
+
+          // The container for the 4 buttons
+          createElement('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
+            ...['All', 'Fastballs', 'Breaking', 'Offspeed'].map(group => {
+              const isSelected = (this.lastPitchGroup || 'All') === group;
+              
+              // Map the button labels and the spelled-out tooltip text
+              let label = '';
+              let tooltipText = '';
+              let hasIcon = true;
+              
+              if (group === 'All') { 
+                label = 'All Pitches'; 
+                hasIcon = false; 
+              } else if (group === 'Fastballs') {
+                label = 'Fastballs Only';
+                tooltipText = 'Includes: 4S (Four-Seam), SI (Sinker), FC (Cutter)';
+              } else if (group === 'Breaking') {
+                label = 'Breaking Balls Only';
+                tooltipText = 'Includes: SL (Slider), CB (Curveball)';
+              } else if (group === 'Offspeed') {
+                label = 'Offspeed Only';
+                tooltipText = 'Includes: CH (Changeup), SP (Splitter)';
+              }
+
+              const btnClass = isSelected ? 'pitch-filter-btn active' : 'pitch-filter-btn inactive';
+
+              // Create the info icon with the fully spelled out pitch types in the tooltip
+              const icon = hasIcon ? createElement('span', {
+                className: 'pitch-info-icon',
+                title: tooltipText
+              }, 'ⓘ') : null;
+
+              // Create the individual button
+              return createElement('button', {
+                className: btnClass,
+                onclick: (e) => {
+                  // 1. Update the hidden input value
+                  document.getElementById('pitchGroup').value = group;
+                  this.lastPitchGroup = group; // Remember selection for re-renders
+
+                  // 2. Visually update all buttons in this row
+                  const parent = e.currentTarget.parentElement;
+                  Array.from(parent.children).forEach(child => {
+                    child.className = 'pitch-filter-btn inactive';
+                  });
+                  e.currentTarget.className = 'pitch-filter-btn active';
+                }
+              }, label, icon);
+            })
           )
         ),
 
