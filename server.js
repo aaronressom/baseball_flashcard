@@ -194,7 +194,7 @@ function assessStealThreat(batter) {
 
     // Fast runners hit weak grounders that still find holes
     const speedHits = batter.atBats.filter(ab =>
-      ab.exitSpeed < 90 && ab.angle < 15 && ab.result === 'Single'
+      ab.exitSpeed < 90 && ab.launchAngle < 15 && ab.result === 'Single'
     ).length;
     if (speedHits >= 2) {
       stealScore += 1;
@@ -203,7 +203,7 @@ function assessStealThreat(batter) {
 
     // Very high exit velo on grounders = leg speed
     const fastGrounders = batter.atBats.filter(ab =>
-      ab.exitSpeed >= 95 && ab.angle < 10
+      ab.exitSpeed >= 95 && ab.launchAngle < 10
     ).length;
     if (fastGrounders >= 2) {
       stealScore += 2;
@@ -373,10 +373,21 @@ function transformPitchDataToTeams(pitchData, existingData = {}, maxVelocity = 9
       if (pitch.play_result.includes('StolenBase') || pitch.k_or_bb === 'Stolen Base') batterData.stolenBases++;
       if (pitch.play_result.includes('CaughtStealing')) batterData.caughtStealing++;
       if (pitch.play_result.includes('Bunt') || pitch.pitch_call.includes('Bunt')) batterData.bunts++;
-      if (pitch.pitch_call === 'InPlay' && pitch.angle !== null && pitch.exit_speed) {
-        batterData.atBats.push({ angle: pitch.angle, distance: pitch.distance || 0, exitSpeed: pitch.exit_speed, result: pitch.play_result });
+      if (pitch.pitch_call === 'InPlay' && pitch.exit_speed) {
+        if (batterData.atBats.length < 5) {
+          console.log(`${batterData.batter}: direction raw value = ${pitch.direction}, type = ${typeof pitch.direction}`);
+        }
+        batterData.atBats.push({ 
+          launchAngle: pitch.angle || 0,
+          direction: pitch.direction || 0, 
+          distance: pitch.distance || 0, 
+          exitSpeed: pitch.exit_speed, 
+          result: pitch.play_result
+        });
       }
     }
+
+    
 
     if (pitch.k_or_bb === 'Strikeout' && currentPA.pitches.length >= 2) {
       const lastTwo = currentPA.pitches.slice(-2);
@@ -446,27 +457,36 @@ function transformPitchDataToTeams(pitchData, existingData = {}, maxVelocity = 9
 
         if (batter.atBats.length >= 5) {
           const pullCount = batter.atBats.filter(ab =>
-            batter.handedness === 'LHB' ? ab.angle > 15 : ab.angle < -15
+            batter.handedness === 'LHB' ? ab.direction > 15 : ab.direction < -15
           ).length;
 
           const centCount = batter.atBats.filter(ab =>
-            ab.angle >= -15 && ab.angle <= 15
+            ab.direction >= -15 && ab.direction <= 15
           ).length;
 
           const oppoCount = batter.atBats.filter(ab =>
-            batter.handedness === 'LHB' ? ab.angle < -15 : ab.angle > 15
+            batter.handedness === 'LHB' ? ab.direction < -15 : ab.direction > 15
           ).length;
 
           const total = batter.atBats.length;
           const pullPct = (pullCount / total * 100);
-          const centPct  = (centCount  / total * 100);
-          const oppoPct  = (oppoCount  / total * 100);
+          const centPct = (centCount / total * 100);
+          const oppoPct = (oppoCount / total * 100);
 
-          if (pullPct > 60)       batter.tendencies.spray = `Pull hitter (${pullPct.toFixed(0)}%)`;
-          else if (oppoPct > 40)  batter.tendencies.spray = `Opposite field (${oppoPct.toFixed(0)}%)`;
-          else                    batter.tendencies.spray = `All fields (P:${pullPct.toFixed(0)}% C:${centPct.toFixed(0)}% O:${oppoPct.toFixed(0)}%)`;
+          // Debug output
+          if (batter.atBats.length >= 5 && batter.batter.includes(' ')) {
+            console.log(`${batter.batter}: Pull=${pullCount}, Center=${centCount}, Oppo=${oppoCount}, Total=${total}`);
+            console.log(`  Percentages: P:${pullPct.toFixed(0)}% C:${centPct.toFixed(0)}% O:${oppoPct.toFixed(0)}%`);
+          }
+
+          if (pullPct > 60) {
+            batter.tendencies.spray = `Pull hitter (${pullPct.toFixed(0)}%)`;
+          } else if (oppoPct > 40) {
+            batter.tendencies.spray = `Opposite field (${oppoPct.toFixed(0)}%)`;
+          } else {
+            batter.tendencies.spray = `All fields (P:${pullPct.toFixed(0)}% C:${centPct.toFixed(0)}% O:${oppoPct.toFixed(0)}%)`;
+          }
         }
-
 
         // Analyze pitch sequences that get OUTS (not just strikeouts)
         function analyzeOutSequences(outSequences) {
