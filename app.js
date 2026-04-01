@@ -2,27 +2,11 @@ let TEAMS_DATA = {};
 let METADATA = null;
 // Default settings
 const DEFAULT_SETTINGS = {
-  // First pitch thresholds
-  aggressiveFirstPitchThreshold: 50,
-  // Steal threat thresholds
-  stealHighAttemptsThreshold: 3,
-  stealModerateAttemptsThreshold: 1,
-  // Bunt threat thresholds
-  buntHighThreshold: 3,
-  buntModerateThreshold: 1,
-  // Spray chart thresholds
-  sprayPullThreshold: 60,
-  sprayOppoThreshold: 40,
-  sprayMinAtBats: 5,
-  sprayAngleThreshold: 15,
   // Zone analysis thresholds
   vulnerableZoneMinSwings: 3,
-  vulnerableZoneThreshold: 45,
+  vulnerableZoneThreshold: 35,
   hotZoneMinHardHits: 2,
   hotZoneHardHitThreshold: 40,
-  // Contact quality thresholds
-  hardContactThreshold: 95,
-  weakContactThreshold: 70,
   // Pitch display settings
   maxPitchesDisplayed: 10,
   showOnlyGoodPitches: false,
@@ -70,6 +54,8 @@ function createElement(tag, props = {}, ...children) {
       Object.assign(el.style, value);
     } else if (key.startsWith('on') && typeof value === 'function') {
       el.addEventListener(key.substring(2).toLowerCase(), value);
+    } else if (key === 'checked') {
+      el.checked = Boolean(value);
     } else {
       el.setAttribute(key, value);
     }
@@ -97,9 +83,9 @@ function createPitchZone(zones, handedness, allowedZones = null) {
       filteredZones = filteredZones.filter(z => allowedZones.includes(z.zone));
     } else {
       // No vulnerable zones identified — at strict/balanced, show only good pitches
-      // At broad (threshold < 50), show everything
+      // At broad (threshold = 60), show everything
       const threshold = CURRENT_SETTINGS.vulnerableZoneThreshold;
-      if (threshold >= 50) {
+      if (threshold <= 35) {
         filteredZones = filteredZones.filter(z => z.good === true);
       }
     }
@@ -250,7 +236,7 @@ const stripPercents = (text) => {
   vulnerableZones.sort((a, b) => b.score - a.score);
   hotZones.sort((a, b) => b.hardHitPct - a.hardHitPct);
 
-  const filteredVulnerableZones = vulnerableZones.filter(z => z.score >= vulnThreshold);
+  const filteredVulnerableZones = vulnerableZones.filter(z => z.score <= vulnThreshold);
 
   if (app) {
     app.allowedZones = filteredVulnerableZones.map(z => z.zone);
@@ -263,63 +249,42 @@ const stripPercents = (text) => {
 
   // The UI Slider (Aaron part)
 
-  // Helper to determine the text AND the color based on the value
-  const getConfidenceState = (val) => {
-      if (val >= 75) return { text: 'Strict (Critical Only)', color: '#22c55e' }; // Green
-      if (val >= 50) return { text: 'Balanced (Critical + Major)', color: '#f59e0b' }; // Amber/Yellow
-      return { text: 'Broad (All Weaknesses)', color: '#ef4444' }; // Red
-  };
+  // 3 fixed confidence levels: threshold = max vulnerabilityScore allowed through
+  // Score 0 = most vulnerable (CRITICAL), score 60 = least (MODERATE)
+  const CONFIDENCE_LEVELS = [
+    { label: 'Broad',     desc: 'All Weaknesses',   threshold: 60, color: '#ef4444' },
+    { label: 'Balanced',  desc: 'Critical + Major',  threshold: 35, color: '#f59e0b' },
+    { label: 'Strict',    desc: 'Critical Only',     threshold: 20, color: '#22c55e' },
+  ];
 
-  // Grab the initial state so it renders correctly on load
-  const initialState = getConfidenceState(vulnThreshold);
-
-  // The UI Slider (Aaron part)
   const confidenceSlider = app ? createElement('div', { style: { padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '16px', boxShadow: 'var(--shadow-sm)' } },
-    createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' } },
-      createElement('span', { style: { fontSize: '15px', fontWeight: '700', color: 'var(--text)' } }, 'Weakness Confidence'),
-      // Sleek Pill Badge with dynamic background color
-      createElement('span', { 
-        id: 'slider-value-display', 
-        style: { 
-          fontSize: '12px', 
-          fontWeight: '700', 
-          color: 'white', 
-          background: initialState.color, 
-          padding: '4px 10px', 
-          borderRadius: '12px', 
-          letterSpacing: '0.5px',
-          transition: 'background-color 0.2s ease' // Smooth fade between colors
-        } 
-      }, initialState.text)
+    createElement('div', { style: { marginBottom: '10px' } },
+      createElement('span', { style: { fontSize: '15px', fontWeight: '700', color: 'var(--text)' } }, 'Weakness Confidence')
     ),
-    createElement('input', {
-      type: 'range', min: '0', max: '100', step: '1',
-      value: vulnThreshold,
-      className: 'setting-slider',
-      style: { 
-        width: '100%', 
-        cursor: 'pointer', 
-        accentColor: initialState.color, // Dynamic slider bar color
-        height: '6px',
-        outline: 'none',
-        transition: 'accent-color 0.2s ease' // Smooth fade for the slider bar
-      },
-      oninput: (e) => {
-        const val = parseInt(e.target.value, 10);
-        const newState = getConfidenceState(val);
-        
-        // 1. Update the text and color of the badge
-        const badge = document.getElementById('slider-value-display');
-        badge.innerText = newState.text;
-        badge.style.background = newState.color;
-        
-        // 2. Update the color of the slider bar itself
-        e.target.style.accentColor = newState.color;
-        
-        // 3. Feed the raw number to Angela's backend logic silently
-        app.updateSetting('vulnerableZoneThreshold', val);
-      }
-    })
+    createElement('div', { style: { display: 'flex', gap: '8px' } },
+      ...CONFIDENCE_LEVELS.map(level => {
+        const isActive = level.threshold === vulnThreshold;
+        return createElement('button', {
+          style: {
+            flex: '1',
+            padding: '8px 4px',
+            borderRadius: '8px',
+            border: `2px solid ${isActive ? level.color : '#e2e8f0'}`,
+            background: isActive ? level.color : '#f8fafc',
+            color: isActive ? 'white' : '#64748b',
+            fontWeight: '700',
+            fontSize: '12px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+            lineHeight: '1.3',
+          },
+          onclick: () => app.updateSetting('vulnerableZoneThreshold', level.threshold)
+        },
+          createElement('div', {}, level.label),
+          createElement('div', { style: { fontSize: '10px', fontWeight: '500', opacity: isActive ? '0.9' : '0.7' } }, level.desc)
+        );
+      })
+    )
   ) : null;
 
   // ------- CONFIDENCE SLIDER START OLD -------
@@ -970,50 +935,40 @@ createElement('div', {},
     };
     return createElement('div', { className: 'settings-overlay', onclick: () => this.toggleSettings() },
       createElement('div', { className: 'settings-modal', onclick: (e) => e.stopPropagation() },
-        createElement('h3', {}, 'Analysis Settings'),
-        createElement('div', { className: 'settings-section' },
-          createElement('h4', {}, 'Pitch Display'),
-          createSlider('Max Pitches Displayed', 'maxPitchesDisplayed', 1, 50, 1),
-          createSlider('Pitch Circle Size (px)', 'pitchCircleSize', 32, 100, 1),
-          createCheckbox('Show Only Good Pitches', 'showOnlyGoodPitches'),
-          createCheckbox('Show Only Bad Pitches', 'showOnlyBadPitches')
+
+        // Header
+        createElement('div', { className: 'settings-modal__header' },
+          createElement('h3', { className: 'settings-modal__title' }, 'Analysis Settings'),
+          createElement('p', { className: 'settings-modal__subtitle' }, 'Adjust thresholds and display preferences')
         ),
-        createElement('div', { className: 'settings-section' },
-          createElement('h4', {}, 'First Pitch Approach'),
-          createSlider('Aggressive Threshold (%)', 'aggressiveFirstPitchThreshold', 0, 100, 5)
+
+        // Body — cards (only settings that are actually wired up)
+        createElement('div', { className: 'settings-modal__body' },
+          createElement('div', { className: 'settings-grid' },
+
+            // Pitch Display — full width
+            createElement('div', { className: 'settings-card full-width' },
+              createElement('div', { className: 'settings-card__header' }, 'Pitch Display'),
+              createSlider('Max Pitches Displayed', 'maxPitchesDisplayed', 1, 50, 1),
+              createSlider('Pitch Circle Size (px)', 'pitchCircleSize', 32, 50, 1),
+              createCheckbox('Show Only Good Pitches', 'showOnlyGoodPitches'),
+              createCheckbox('Show Only Bad Pitches', 'showOnlyBadPitches')
+            ),
+
+            // Zone Analysis — full width
+            createElement('div', { className: 'settings-card full-width' },
+              createElement('div', { className: 'settings-card__header' }, 'Zone Analysis'),
+              createSlider('Vulnerable Zone Min Swings', 'vulnerableZoneMinSwings', 1, 10, 1),
+              createSlider('Hot Zone Min Hard Hits', 'hotZoneMinHardHits', 1, 10, 1),
+              createSlider('Hot Zone Hard Hit % Threshold', 'hotZoneHardHitThreshold', 0, 100, 5)
+            )
+          )
         ),
-        createElement('div', { className: 'settings-section' },
-          createElement('h4', {}, 'Steal Threat'),
-          createSlider('High Threat Min Attempts', 'stealHighAttemptsThreshold', 1, 10, 1),
-          createSlider('Moderate Threat Min Attempts', 'stealModerateAttemptsThreshold', 1, 5, 1)
-        ),
-        createElement('div', { className: 'settings-section' },
-          createElement('h4', {}, 'Bunt Threat'),
-          createSlider('High Threat Min Bunts', 'buntHighThreshold', 1, 10, 1),
-          createSlider('Moderate Threat Min Bunts', 'buntModerateThreshold', 1, 5, 1)
-        ),
-        createElement('div', { className: 'settings-section' },
-          createElement('h4', {}, 'Spray Chart'),
-          createSlider('Pull Hitter Threshold (%)', 'sprayPullThreshold', 0, 100, 5),
-          createSlider('Opposite Field Threshold (%)', 'sprayOppoThreshold', 0, 100, 5),
-          createSlider('Min At Bats for Analysis', 'sprayMinAtBats', 1, 20, 1),
-          createSlider('Angle Threshold (degrees)', 'sprayAngleThreshold', 5, 45, 5)
-        ),
-        createElement('div', { className: 'settings-section' },
-          createElement('h4', {}, 'Zone Analysis'),
-          createSlider('Vulnerable Zone Min Swings', 'vulnerableZoneMinSwings', 1, 10, 1),
-          createSlider('Vulnerable Zone Threshold', 'vulnerableZoneThreshold', 0, 100, 5),
-          createSlider('Hot Zone Min Hard Hits', 'hotZoneMinHardHits', 1, 10, 1),
-          createSlider('Hot Zone Hard Hit % Threshold', 'hotZoneHardHitThreshold', 0, 100, 5)
-        ),
-        createElement('div', { className: 'settings-section' },
-          createElement('h4', {}, 'Contact Quality'),
-          createSlider('Hard Contact Threshold (mph)', 'hardContactThreshold', 80, 110, 1),
-          createSlider('Weak Contact Threshold (mph)', 'weakContactThreshold', 50, 90, 1)
-        ),
-        createElement('div', { className: 'settings-buttons' },
-          createElement('button', { className: 'reset-btn', onclick: () => this.resetSettings() }, 'Reset to Defaults'),
-          createElement('button', { className: 'close-settings-btn', onclick: () => this.toggleSettings() }, 'Close')
+
+        // Sticky footer
+        createElement('div', { className: 'settings-modal__footer' },
+          createElement('button', { className: 'settings-modal__reset-btn', onclick: () => this.resetSettings() }, 'Reset to Defaults'),
+          createElement('button', { className: 'settings-modal__close-btn', onclick: () => this.toggleSettings() }, 'Close')
         )
       )
     );
@@ -1055,16 +1010,125 @@ createElement('div', {},
       ),
       this.showInfoPanel ? createElement('div', { className: 'info-overlay', onclick: () => this.toggleInfo() },
         createElement('div', { className: 'info-modal', onclick: (e) => e.stopPropagation() },
-          createElement('h3', {}, 'Understanding this Widget'),
-          createElement('div', { className: 'info-content' },
-            createElement('p', {}, createElement('strong', {}, 'Strike Zone:'), ' Green circles = attack these locations (whiffs, weak contact). Red circles = avoid (hard contact, balls). Letters show pitch type: 4S (Four-Seam), SL (Slider), CB (Curveball), CH (Changeup), SI (Sinker), FC (Cutter), SP (Splitter). The batter icon shows their batting stance.'),
-            createElement('p', {}, createElement('strong', {}, 'Vulnerable Zones:'), ' Where batter struggles most. High whiff rates, weak contact, or lots of fouls. Attack here!'),
-            createElement('p', {}, createElement('strong', {}, 'Hot Zones:'), ' Danger zones where batter hits hard (95+ mph exit velo). Avoid pitching here.'),
-            createElement('p', {}, createElement('strong', {}, 'Out Sequence:'), ' Most common pitch sequences that get this batter out (groundouts, flyouts, strikeouts, etc.). Shows what historically works against them.'),
-            createElement('p', {}, createElement('strong', {}, 'Threats:'), ' Steal threat shows base running ability (infield hits, speed indicators). Bunt threat shows contact rate and bat control. Spray chart shows pull/opposite field tendencies.'),
-            createElement('p', {}, createElement('strong', {}, 'First-Pitch:'), ' Shows if batter is aggressive (>50% swing rate) or patient on first pitch.')
+
+          // Header
+          createElement('div', { className: 'info-modal__header' },
+            createElement('h3', { className: 'info-modal__title' }, 'Understanding the Widget'),
+            createElement('p', { className: 'info-modal__subtitle' }, 'A guide to reading your batter flashcards')
           ),
-          createElement('button', { className: 'close-info-btn', onclick: () => this.toggleInfo() }, 'Close')
+
+          // Body
+          createElement('div', { className: 'info-modal__body' },
+
+            // Strike Zone
+            createElement('div', { className: 'info-entry' },
+              createElement('div', { className: 'info-entry__icon', style: { background: '#dbeafe' } }, '🎯'),
+              createElement('div', { className: 'info-entry__content' },
+                createElement('div', { className: 'info-entry__title' }, 'Strike Zone'),
+                createElement('div', { className: 'info-entry__desc' },
+                  'Green circles = attack (whiffs, weak contact). Red circles = avoid (hard contact, balls in play). The batter icon shows their batting stance.'
+                ),
+                createElement('div', { className: 'pitch-badge-row' },
+                  ...[
+                    { abbr: '4S', name: 'Four-Seam' },
+                    { abbr: 'SI', name: 'Sinker' },
+                    { abbr: 'FC', name: 'Cutter' },
+                    { abbr: 'SL', name: 'Slider' },
+                    { abbr: 'CB', name: 'Curveball' },
+                    { abbr: 'CH', name: 'Changeup' },
+                    { abbr: 'SP', name: 'Splitter' },
+                  ].map(p =>
+                    createElement('span', { className: 'pitch-badge' },
+                      createElement('strong', {}, p.abbr),
+                      ` ${p.name}`
+                    )
+                  )
+                )
+              )
+            ),
+
+            // Vulnerable Zones
+            createElement('div', { className: 'info-entry' },
+              createElement('div', { className: 'info-entry__icon', style: { background: '#fef9c3' } }, '⚡'),
+              createElement('div', { className: 'info-entry__content' },
+                createElement('div', { className: 'info-entry__title' }, 'Vulnerable Zones'),
+                createElement('div', { className: 'info-entry__desc' },
+                  'Locations where the batter struggles most — high whiff rate, weak contact, or excessive fouls. Attack here.'
+                )
+              )
+            ),
+
+            // Hot Zones
+            createElement('div', { className: 'info-entry' },
+              createElement('div', { className: 'info-entry__icon', style: { background: '#fee2e2' } }, '🔥'),
+              createElement('div', { className: 'info-entry__content' },
+                createElement('div', { className: 'info-entry__title' }, 'Hot Zones (Avoid)'),
+                createElement('div', { className: 'info-entry__desc' },
+                  'Where the batter makes hard contact (95+ mph exit velocity). Pitching here is dangerous — stay out.'
+                )
+              )
+            ),
+
+            // Out Sequence
+            createElement('div', { className: 'info-entry' },
+              createElement('div', { className: 'info-entry__icon', style: { background: '#ede9fe' } }, '📋'),
+              createElement('div', { className: 'info-entry__content' },
+                createElement('div', { className: 'info-entry__title' }, 'Out Sequence'),
+                createElement('div', { className: 'info-entry__desc' },
+                  'The most common pitch sequences that historically get this batter out — groundouts, flyouts, strikeouts. Use this as your blueprint.'
+                )
+              )
+            ),
+
+            // Weakness Confidence
+            createElement('div', { className: 'info-entry' },
+              createElement('div', { className: 'info-entry__icon', style: { background: '#d1fae5' } }, '🎚️'),
+              createElement('div', { className: 'info-entry__content' },
+                createElement('div', { className: 'info-entry__title' }, 'Weakness Confidence Slider'),
+                createElement('div', { className: 'info-entry__desc' },
+                  'Controls how strict the vulnerability filter is. ',
+                  createElement('strong', {}, 'Strict'), ' = critical weaknesses only. ',
+                  createElement('strong', {}, 'Balanced'), ' = critical + major. ',
+                  createElement('strong', {}, 'Broad'), ' = all identified weaknesses.'
+                )
+              )
+            ),
+
+            // Threats
+            createElement('div', { className: 'info-entry' },
+              createElement('div', { className: 'info-entry__icon', style: { background: '#ffedd5' } }, '⚠️'),
+              createElement('div', { className: 'info-entry__content' },
+                createElement('div', { className: 'info-entry__title' }, 'Threats'),
+                createElement('div', { className: 'info-entry__desc' },
+                  createElement('span', { className: 'info-threat-row' },
+                    createElement('strong', {}, 'Steal:'), ' Base running ability based on infield hits and speed indicators.'
+                  ),
+                  createElement('span', { className: 'info-threat-row' },
+                    createElement('strong', {}, 'Bunt:'), ' Contact rate and bat control tendency.'
+                  ),
+                  createElement('span', { className: 'info-threat-row' },
+                    createElement('strong', {}, 'Spray:'), ' Pull hitter, opposite field, or all-fields tendency.'
+                  )
+                )
+              )
+            ),
+
+            // First Pitch
+            createElement('div', { className: 'info-entry info-entry--last' },
+              createElement('div', { className: 'info-entry__icon', style: { background: '#dcfce7' } }, '🟢'),
+              createElement('div', { className: 'info-entry__content' },
+                createElement('div', { className: 'info-entry__title' }, 'First-Pitch Approach'),
+                createElement('div', { className: 'info-entry__desc' },
+                  'Shows how often the batter swings at the first pitch. Above 50% = Aggressive. Below = Patient. Use this to decide your opening pitch.'
+                )
+              )
+            )
+          ),
+
+          // Footer
+          createElement('div', { className: 'info-modal__footer' },
+            createElement('button', { className: 'info-modal__close-btn', onclick: () => this.toggleInfo() }, 'Got it')
+          )
         )
       ) : null,
       this.showSettingsPanel ? this.renderSettingsPanel() : null,
