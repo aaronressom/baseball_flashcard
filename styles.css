@@ -648,12 +648,28 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   font-size: 16px;
   color: var(--muted);
   font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.threat-label {
+  font-size: 14px;
+  min-width: 52px;
 }
 
 .tendency-value, .threat-value {
   font-size: 16px;
   font-weight: 700;
   color: var(--text);
+}
+
+.threat-value {
+  font-size: 14px;
+  flex: 1;
+  text-align: right;
+  padding-left: 10px;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* Power Sequence Colors */
@@ -665,6 +681,8 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
 .power-sequence.stats-box h4 { color: var(--accent); }
 .power-sequence.threat-box { border-left: 4px solid var(--danger); }
 .power-sequence.threat-box h4 { color: var(--danger); }
+.power-sequence.out-sequence { border-left: 4px solid #10b981; }
+.power-sequence.out-sequence h4 { color: #10b981; }
 
 .power-sequence-text {
   font-size: 18px;

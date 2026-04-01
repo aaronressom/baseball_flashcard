@@ -257,9 +257,14 @@ const stripPercents = (text) => {
     { label: 'Strict',    desc: 'Critical Only',     threshold: 20, color: '#22c55e' },
   ];
 
-  const confidenceSlider = app ? createElement('div', { style: { padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '16px', boxShadow: 'var(--shadow-sm)' } },
-    createElement('div', { style: { marginBottom: '10px' } },
-      createElement('span', { style: { fontSize: '15px', fontWeight: '700', color: 'var(--text)' } }, 'Weakness Confidence')
+const confidenceSlider = app ? createElement('div', { style: { padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '16px', boxShadow: 'var(--shadow-sm)' } },
+    createElement('div', { style: { marginBottom: '10px', textAlign: 'center' } },
+      createElement('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '7px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '5px 14px' } },
+        createElement('span', { style: { width: '12px', height: '12px', borderRadius: '50%', border: '2.5px solid #64748b', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' } },
+          createElement('span', { style: { width: '3px', height: '3px', borderRadius: '50%', background: '#64748b', display: 'block' } })
+        ),
+        createElement('span', { style: { fontSize: '11px', fontWeight: '700', color: '#475569', letterSpacing: '0.09em', textTransform: 'uppercase' } }, 'Weakness Confidence')
+      )
     ),
     createElement('div', { style: { display: 'flex', gap: '8px' } },
       ...CONFIDENCE_LEVELS.map(level => {
@@ -330,7 +335,7 @@ const stripPercents = (text) => {
       createElement('div', { className: 'power-sequence-text' },
         hotZones.slice(0, 2).map(z => z.zone).join(', ') || 'None identified')
     ) : null,
-    createElement('div', { className: 'power-sequence' },
+    createElement('div', { className: 'power-sequence out-sequence' },
       createElement('h4', {}, 'Out Sequence'),
       createElement('div', { className: 'power-sequence-text' }, cleanedPowerSequence)
     ),
@@ -1084,7 +1089,7 @@ createElement('div', {},
             createElement('div', { className: 'info-entry' },
               createElement('div', { className: 'info-entry__icon', style: { background: '#d1fae5' } }, '🎚️'),
               createElement('div', { className: 'info-entry__content' },
-                createElement('div', { className: 'info-entry__title' }, 'Weakness Confidence Slider'),
+                createElement('div', { className: 'info-entry__title' }, 'Weakness Confidence'),
                 createElement('div', { className: 'info-entry__desc' },
                   'Controls how strict the vulnerability filter is. ',
                   createElement('strong', {}, 'Strict'), ' = critical weaknesses only. ',
