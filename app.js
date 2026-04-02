@@ -518,13 +518,13 @@ class FlashcardApp {
    * @param {string} [pitchGroup='All'] - Pitch type filter: 'All', 'Fastballs', 'Breaking', or 'Offspeed'.
    * @returns {Promise<void>}
    */
-  async loadDataRange(startDate, endDate, maxVelocity = 105, customLoadingMessage = null, pitchGroup = 'All') {
+  async loadDataRange(startDate, endDate, maxVelocity = 105, seasonYear = null, pitchGroup = 'All') {
 try {
       this.currentScreen = 'loading';
 
-      // Use the custom message if provided, otherwise fall back to the default
-      const groupText = pitchGroup !== 'All' ? ` (${pitchGroup})` : '';
-      this.loadingMessage = customLoadingMessage || `Loading Data${groupText} (Max Vel: ${maxVelocity} MPH)...`;
+      const pitchLabel = { All: 'All Pitches', Fastballs: 'Fastballs', Breaking: 'Breaking', Offspeed: 'Offspeed' }[pitchGroup] || 'All Pitches';
+      const base = `Loading ${pitchLabel} (with Max Velocity of ${maxVelocity}mph)`;
+      this.loadingMessage = seasonYear ? `${base} for the ${seasonYear} Full Season...` : `${base}...`;
       this.render();
 
       const response = await fetch(
@@ -585,7 +585,7 @@ try {
       const pitchGroup = document.getElementById('pitchGroup').value;
       let startStr = '';
       let endStr = '';
-      let customMsg = 'Loading the Full Season...';
+      let seasonYear = null;
 
       if (days) {
           const end = new Date();
@@ -596,22 +596,21 @@ try {
               const year = d.getFullYear();
               const month = String(d.getMonth() + 1).padStart(2, '0');
               const day = String(d.getDate()).padStart(2, '0');
-              return `${year}-${month}-${day}`; 
+              return `${year}-${month}-${day}`;
           };
           startStr = formatDate(start);
           endStr = formatDate(end);
-          customMsg = `Loading the last ${days} days...`;
       } else {
           const season = getFullSeasonRange();
           startStr  = season.start;
           endStr    = season.end;
-          customMsg = `Loading ${season.year} Full Season...`;
+          seasonYear = season.year;
       }
 
       // retain the dates in the calendar memory
       this.lastStartDate = startStr;
       this.lastEndDate = endStr;
-      this.loadDataRange(startStr, endStr, maxVel, customMsg, pitchGroup);
+      this.loadDataRange(startStr, endStr, maxVel, seasonYear, pitchGroup);
 }
 
   showDateSelect() { this.currentScreen = 'dateSelect'; this.validationError = null; this.noDataError = null; this.render(); }
@@ -638,8 +637,17 @@ try {
     window.addEventListener('keydown', this.keyHandler);
   }
   renderLoading() {
-    return createElement('div', { className: 'team-select-screen' },
-      createElement('h1', {}, 'Loading...'),
+    const dotsSpan = createElement('span', { id: 'loading-dots' }, '');
+    let dotCount = 0;
+    const interval = setInterval(() => {
+      const el = document.getElementById('loading-dots');
+      if (!el) { clearInterval(interval); return; }
+      dotCount = (dotCount + 1) % 4;
+      el.textContent = '.'.repeat(dotCount);
+    }, 500);
+
+    return createElement('div', { className: 'team-select-screen loading-screen' },
+      createElement('h1', {}, 'Loading', dotsSpan),
       createElement('p', {}, this.loadingMessage)
     );
   }

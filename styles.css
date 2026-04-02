@@ -70,6 +70,10 @@ html, body {
   100% { background-position: 200% center; }
 }
 
+.loading-screen h1 {
+  animation-duration: 4s;
+}
+
 .team-select-screen p {
   font-size: 18px;
   color: var(--muted);
