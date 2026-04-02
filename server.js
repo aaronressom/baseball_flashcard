@@ -172,8 +172,16 @@ async function fetchPitchesByDateRange(startDateStr, endDateStr) {
             date_range_end: endDateStr 
         });
 
-        console.log(`✅ Success: Fetched ${pitches.length} pitches!`);
-        return pitches; 
+        console.log(`✅ Success: Fetched ${pitches.length} pitches from API`);
+
+        const filtered = pitches.filter(p => {
+          const d = (p.date || '').slice(0, 10);
+          return d >= startDateStr && d <= endDateStr;
+        });
+        console.log(`✅ After date filter (${startDateStr} → ${endDateStr}): ${filtered.length} pitches`);
+
+        pitchDataCache.set(cacheKey, filtered);
+        return filtered;
 
     } catch (error) {
         console.error("❌ Error fetching from SLUGGER API:", error);
