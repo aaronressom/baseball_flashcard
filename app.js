@@ -523,7 +523,7 @@ try {
       this.currentScreen = 'loading';
 
       const pitchLabel = { All: 'All Pitches', Fastballs: 'Fastballs', Breaking: 'Breaking', Offspeed: 'Offspeed' }[pitchGroup] || 'All Pitches';
-      const base = `Loading ${pitchLabel} (with Max Velocity of ${maxVelocity}mph)`;
+      const base = `Loading ${pitchLabel} (with Max Velocity of ${maxVelocity} MPH)`;
       this.loadingMessage = seasonYear ? `${base} for the ${seasonYear} Full Season...` : `${base}...`;
       this.render();
 
@@ -738,7 +738,7 @@ try {
                 hasIcon = false; 
               } else if (group === 'Fastballs') {
                 label = 'Fastballs Only';
-                tooltipText = 'Includes: 4S (Four-Seam), SI (Sinker), FC (Cutter)';
+                tooltipText = 'Includes: 4S (Four-Seam), Si (Sinker), FC (Cutter)';
               } else if (group === 'Breaking') {
                 label = 'Breaking Balls Only';
                 tooltipText = 'Includes: SL (Slider), CB (Curveball)';
@@ -1107,7 +1107,7 @@ createElement('div', {},
                 createElement('div', { className: 'pitch-badge-row' },
                   ...[
                     { abbr: '4S', name: 'Four-Seam' },
-                    { abbr: 'SI', name: 'Sinker' },
+                    { abbr: 'Si', name: 'Sinker' },
                     { abbr: 'FC', name: 'Cutter' },
                     { abbr: 'SL', name: 'Slider' },
                     { abbr: 'CB', name: 'Curveball' },
