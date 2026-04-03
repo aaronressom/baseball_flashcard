@@ -5,8 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "build": "echo 'build complete'",
     "dev": "nodemon server.js",
-    "test": "node test-api.js"
+    "test": "node test-api.js",
+    "vercel-build": "npm run start"
   },
   "keywords": [
     "baseball",
