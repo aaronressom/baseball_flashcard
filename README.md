@@ -3,7 +3,7 @@
 
 
 
-Deployed at: https://alpb-analytics.com/widgets/flashcard/
+Deployed at: https://baseball-flashcard.vercel.app/
 
 
 ---
