@@ -425,6 +425,7 @@ class FlashcardApp {
     this.selectedBatterIndex = 0;
     this.showInfoPanel = false;
     this.showSettingsPanel = false;
+    this.isSettingsDocked = false;
     this.sortBy = 'number';
     this.sortOrder = 'asc';
     const defaults = getDefaultSeasonDates();
@@ -508,6 +509,12 @@ class FlashcardApp {
   }
   toggleSettings() {
     this.showSettingsPanel = !this.showSettingsPanel;
+    this.render();
+  }
+  toggleDock() {
+    this.isSettingsDocked = !this.isSettingsDocked;
+    // When docking, ensure panel is open; when undocking, close panel
+    this.showSettingsPanel = this.isSettingsDocked ? false : false;
     this.render();
   }
   updateSetting(key, value) {
@@ -1005,7 +1012,7 @@ createElement('div', {},
     return [...lineup].sort((a, b) => {
       let cmp = 0;
       if (this.sortBy === 'number') {
-        cmp = (a.jerseyNumber || 0) - (b.jerseyNumber || 0);
+        cmp = (a.battingOrder || 0) - (b.battingOrder || 0);
       } else if (this.sortBy === 'name') {
         cmp = (a.batter || '').localeCompare(b.batter || '');
       } else if (this.sortBy === 'handedness') {
@@ -1033,7 +1040,7 @@ createElement('div', {},
       );
     });
     const sortOptions = [
-      { value: 'number',   label: 'Jersey Number' },
+      { value: 'number',   label: 'Estimated Batting Order' },
       { value: 'name',     label: 'Name' },
       { value: 'handedness', label: 'Handedness' },
       { value: 'pitches', label: 'Total Pitches' },
@@ -1061,7 +1068,7 @@ createElement('div', {},
       createElement('div', { className: 'lineup-grid' }, ...cards)
     );
   }
-  renderSettingsPanel(rawCount = 0, filteredCount = 0, goodCount = 0, badCount = 0) {
+  renderSettingsPanel(rawCount = 0, filteredCount = 0, goodCount = 0, badCount = 0, docked = false) {
     // Clamp current value so slider and number input stay within effective range
     const sliderMax = CURRENT_SETTINGS.showAllZones ? rawCount : filteredCount;
     if (CURRENT_SETTINGS.maxPitchesDisplayed > sliderMax) {
@@ -1129,57 +1136,85 @@ createElement('div', {},
         )
       );
     };
-    return createElement('div', { className: 'settings-overlay', onclick: () => this.toggleSettings() },
-      createElement('div', { className: 'settings-modal', onclick: (e) => e.stopPropagation() },
+    // Dock toggle row shown in the header
+    const dockToggleRow = createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border)' } },
+      createElement('span', { style: { fontSize: '13px', fontWeight: '600', color: 'var(--text)' } }, 'Dock to Sidebar'),
+      createElement('label', { className: 'toggle-switch' },
+        createElement('input', {
+          type: 'checkbox',
+          checked: this.isSettingsDocked,
+          className: 'toggle-input',
+          onchange: () => this.toggleDock()
+        }),
+        createElement('span', { className: 'toggle-track' })
+      )
+    );
 
-        // Header
-        createElement('div', { className: 'settings-modal__header' },
-          createElement('h3', { className: 'settings-modal__title' }, 'Analysis Settings'),
-          createElement('p', { className: 'settings-modal__subtitle' }, 'Adjust thresholds and display preferences')
-        ),
+    // Shared inner content (body + footer) — same in both modal and sidebar modes
+    const innerContent = [
+      createElement('div', { className: 'settings-modal__body' },
+        createElement('div', { className: 'settings-grid' },
 
-        // Body — cards (only settings that are actually wired up)
-        createElement('div', { className: 'settings-modal__body' },
-          createElement('div', { className: 'settings-grid' },
-
-            // Pitch Display — full width
-            createElement('div', { className: 'settings-card full-width' },
-              createElement('div', { className: 'settings-card__header' }, 'Pitch Display'),
-              createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', marginBottom: '12px' } },
-                ...[
-                  { label: 'Total Pitches',          value: rawCount,      bg: '#f1f5f9', border: '#cbd5e1', textColor: '#1e293b' },
-                  { label: 'Matching Filters',        value: filteredCount, bg: '#eff6ff', border: '#93c5fd', textColor: '#1d4ed8' },
-                  { label: 'Total Good Pitches',      value: goodCount,     bg: '#f0fdf4', border: '#86efac', textColor: '#15803d' },
-                  { label: 'Total Bad Pitches',       value: badCount,      bg: '#fef2f2', border: '#fca5a5', textColor: '#b91c1c' },
-                ].map(({ label, value, bg, border, textColor }) =>
-                  createElement('div', { style: { display: 'inline-flex', flexDirection: 'column', alignItems: 'center', background: bg, border: `1px solid ${border}`, borderRadius: '10px', padding: '6px 14px', minWidth: '80px' } },
-                    createElement('span', { style: { fontSize: '18px', fontWeight: '800', color: textColor, lineHeight: '1.1' } }, value),
-                    createElement('span', { style: { fontSize: '11px', fontWeight: '500', color: '#64748b', marginTop: '2px', textAlign: 'center' } }, label)
+          // Pitch Display — full width
+          createElement('div', { className: 'settings-card full-width' },
+            createElement('div', { className: 'settings-card__header' }, 'Pitch Display'),
+            createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', marginBottom: '12px' } },
+              ...[
+                { label: 'Total Pitches',                   value: rawCount,      bg: '#f1f5f9', border: '#cbd5e1', textColor: '#1e293b' },
+                { label: 'Matching Filters',                 value: filteredCount, bg: '#eff6ff', border: '#93c5fd', textColor: '#1d4ed8', tooltip: 'Pitches remaining after applying Pitch Type, Attack/Vulnerable, and Confidence filters.' },
+                { label: 'Attack Pitches (Strengths)',       value: goodCount,     bg: '#f0fdf4', border: '#86efac', textColor: '#15803d' },
+                { label: 'Vulnerable Pitches (Weaknesses)',  value: badCount,      bg: '#fef2f2', border: '#fca5a5', textColor: '#b91c1c' },
+              ].map(({ label, value, bg, border, textColor, tooltip }) =>
+                createElement('div', { className: 'stat-pill', ...(tooltip ? { 'data-tooltip': tooltip } : {}), style: { display: 'inline-flex', flexDirection: 'column', alignItems: 'center', background: bg, border: `1px solid ${border}`, borderRadius: '10px', padding: '6px 14px', minWidth: '80px', position: 'relative' } },
+                  createElement('span', { style: { fontSize: '18px', fontWeight: '800', color: textColor, lineHeight: '1.1' } }, value),
+                  createElement('span', { style: { fontSize: '11px', fontWeight: '500', color: '#64748b', marginTop: '2px', textAlign: 'center' } },
+                    label,
+                    tooltip ? createElement('span', { style: { marginLeft: '4px', fontSize: '11px', color: '#93c5fd', cursor: 'default' } }, '🛈') : null
                   )
                 )
-              ),
-              createSlider('Max Pitches Displayed', 'maxPitchesDisplayed', 1, CURRENT_SETTINGS.showAllZones ? rawCount : filteredCount, 1),
-              createSlider('Pitch Circle Size (px)', 'pitchCircleSize', 32, 50, 1),
-              createCheckbox('Show All Zones (bypass filter)', 'showAllZones'),
-              createCheckbox('Show Only Good Pitches', 'showOnlyGoodPitches', 'toggle-green'),
-              createCheckbox('Show Only Bad Pitches', 'showOnlyBadPitches', 'toggle-red')
+              )
             ),
+            createSlider('Max Pitches Displayed', 'maxPitchesDisplayed', 1, CURRENT_SETTINGS.showAllZones ? rawCount : filteredCount, 1),
+            createSlider('Pitch Circle Size (px)', 'pitchCircleSize', 32, 50, 1),
+            createCheckbox('Show All Zones (bypass filter)', 'showAllZones'),
+            createCheckbox('Show Only Attack Pitches', 'showOnlyGoodPitches', 'toggle-green'),
+            createCheckbox('Show Only Vulnerable Pitches', 'showOnlyBadPitches', 'toggle-red')
+          ),
 
-            // Zone Analysis — full width
-            createElement('div', { className: 'settings-card full-width' },
-              createElement('div', { className: 'settings-card__header' }, 'Zone Analysis'),
-              createSlider('Vulnerable Zone Min Swings', 'vulnerableZoneMinSwings', 1, 10, 1),
-              createSlider('Hot Zone Min Hard Hits', 'hotZoneMinHardHits', 1, 10, 1),
-              createSlider('Hot Zone Hard Hit % Threshold', 'hotZoneHardHitThreshold', 0, 100, 5)
-            )
+          // Zone Analysis — full width
+          createElement('div', { className: 'settings-card full-width' },
+            createElement('div', { className: 'settings-card__header' }, 'Zone Analysis'),
+            createSlider('Vulnerable Zone Min Swings', 'vulnerableZoneMinSwings', 1, 10, 1),
+            createSlider('Hot Zone Min Hard Hits', 'hotZoneMinHardHits', 1, 10, 1),
+            createSlider('Hot Zone Hard Hit % Threshold', 'hotZoneHardHitThreshold', 0, 100, 5)
           )
-        ),
-
-        // Sticky footer
-        createElement('div', { className: 'settings-modal__footer' },
-          createElement('button', { className: 'settings-modal__reset-btn', onclick: () => this.resetSettings() }, 'Reset to Defaults'),
-          createElement('button', { className: 'settings-modal__close-btn', onclick: () => this.toggleSettings() }, 'Close')
         )
+      ),
+      createElement('div', { className: 'settings-modal__footer' },
+        createElement('button', { className: 'settings-modal__reset-btn', onclick: () => this.resetSettings() }, 'Reset to Defaults'),
+        docked
+          ? createElement('button', { className: 'settings-modal__close-btn', onclick: () => this.toggleDock() }, 'Undock')
+          : createElement('button', { className: 'settings-modal__close-btn', onclick: () => this.toggleSettings() }, 'Close')
+      )
+    ];
+
+    const header = createElement('div', { className: 'settings-modal__header' },
+      createElement('h3', { className: 'settings-modal__title' }, 'Analysis Settings'),
+      createElement('p', { className: 'settings-modal__subtitle' }, 'Adjust thresholds and display preferences'),
+      !docked ? dockToggleRow : null
+    );
+
+    if (docked) {
+      return createElement('div', { id: 'settings-sidebar', className: 'settings-sidebar' },
+        header,
+        ...innerContent
+      );
+    }
+
+    return createElement('div', { className: 'settings-overlay', onclick: () => this.toggleSettings() },
+      createElement('div', { className: 'settings-modal', onclick: (e) => e.stopPropagation() },
+        header,
+        ...innerContent
       )
     );
   }
@@ -1355,7 +1390,7 @@ createElement('div', {},
         this._goodCount = countSource.filter(z => z.good === true).length;
         this._badCount = countSource.filter(z => z.good === false).length;
       })(),
-      this.showSettingsPanel ? this.renderSettingsPanel(this._rawZoneCount, this._fullyFilteredPitches.length, this._goodCount, this._badCount) : null,
+      (!this.isSettingsDocked && this.showSettingsPanel) ? this.renderSettingsPanel(this._rawZoneCount, this._fullyFilteredPitches.length, this._goodCount, this._badCount) : null,
       (() => {
         const { el: pitchZoneInner, count: renderedCount, available: availableCount } = createPitchZone(this._fullyFilteredPitches, data.handedness);
         const pitchZoneEl = createElement('div', { className: 'pitch-zone-section' }, pitchZoneInner);
@@ -1370,6 +1405,10 @@ createElement('div', {},
     );
   }
   render() {
+    // Clean up existing sidebar and docked state
+    document.getElementById('settings-sidebar')?.remove();
+    this.container.classList.remove('app-sidebar-docked');
+
     this.container.innerHTML = '';
     let content;
     if (this.currentScreen === 'loading') content = this.renderLoading();
@@ -1379,6 +1418,13 @@ createElement('div', {},
     else if (this.currentScreen === 'lineup') content = this.renderLineup();
     else if (this.currentScreen === 'flashcard') content = this.renderFlashcard();
     this.container.appendChild(content);
+
+    // After renderFlashcard has run (populating this._rawZoneCount etc.), mount sidebar
+    if (this.isSettingsDocked && this.currentScreen === 'flashcard') {
+      const sidebar = this.renderSettingsPanel(this._rawZoneCount, this._fullyFilteredPitches.length, this._goodCount, this._badCount, true);
+      document.body.appendChild(sidebar);
+      this.container.classList.add('app-sidebar-docked');
+    }
   }
 }
 let app;
