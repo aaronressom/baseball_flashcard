@@ -309,9 +309,9 @@ const stripPercents = (text) => {
   // 3 fixed confidence levels: threshold = max vulnerabilityScore allowed through
   // Score 0 = most vulnerable (CRITICAL), score 60 = least (MODERATE)
   const CONFIDENCE_LEVELS = [
-    { label: 'Broad',     desc: 'All Weaknesses',   threshold: 60, color: '#ef4444' },
-    { label: 'Balanced',  desc: 'Critical + Major',  threshold: 35, color: '#f59e0b' },
-    { label: 'Strict',    desc: 'Critical Only',     threshold: 20, color: '#22c55e' },
+    { label: 'Broad',     desc: 'All Weaknesses',   threshold: 60, minSwings: 3,  color: '#ef4444' },
+    { label: 'Balanced',  desc: 'Critical + Major',  threshold: 35, minSwings: 7,  color: '#f59e0b' },
+    { label: 'Strict',    desc: 'Critical Only',     threshold: 20, minSwings: 10, color: '#22c55e' },
   ];
 
 const activeLevel = CONFIDENCE_LEVELS.find(l => l.threshold === vulnThreshold) || CONFIDENCE_LEVELS[1];
@@ -328,7 +328,7 @@ const confidenceSlider = app ? createElement('div', { style: { padding: '16px', 
     ),
     createElement('div', { style: { display: 'flex', gap: '8px' } },
       ...CONFIDENCE_LEVELS.map(level => {
-        const isActive = level.threshold === vulnThreshold;
+        const isActive = level.threshold === vulnThreshold && level.minSwings === CURRENT_SETTINGS.vulnerableZoneMinSwings;
         return createElement('button', {
           style: {
             flex: '1',
@@ -343,7 +343,7 @@ const confidenceSlider = app ? createElement('div', { style: { padding: '16px', 
             transition: 'all 0.15s ease',
             lineHeight: '1.3',
           },
-          onclick: () => app.updateSetting('vulnerableZoneThreshold', level.threshold)
+          onclick: () => { CURRENT_SETTINGS.vulnerableZoneThreshold = level.threshold; CURRENT_SETTINGS.vulnerableZoneMinSwings = level.minSwings; app.render(); }
         },
           createElement('div', {}, level.label),
           createElement('div', { style: { fontSize: '10px', fontWeight: '500', opacity: isActive ? '0.9' : '0.7' } }, level.desc)
@@ -1069,10 +1069,13 @@ createElement('div', {},
     );
   }
   renderSettingsPanel(rawCount = 0, filteredCount = 0, goodCount = 0, badCount = 0, docked = false) {
-    // Clamp current value so slider and number input stay within effective range
-    const sliderMax = CURRENT_SETTINGS.showAllZones ? rawCount : filteredCount;
+    // Clamp current value into valid range [floor, sliderMax]
+    const sliderMax = Math.max(1, CURRENT_SETTINGS.showAllZones ? rawCount : filteredCount);
+    const floor = Math.min(DEFAULT_SETTINGS.maxPitchesDisplayed, sliderMax);
     if (CURRENT_SETTINGS.maxPitchesDisplayed > sliderMax) {
       CURRENT_SETTINGS.maxPitchesDisplayed = sliderMax;
+    } else if (CURRENT_SETTINGS.maxPitchesDisplayed < floor) {
+      CURRENT_SETTINGS.maxPitchesDisplayed = floor;
     }
     const createSlider = (label, key, min, max, step = 1) => {
       return createElement('div', { className: 'setting-item' },
