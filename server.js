@@ -3,6 +3,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(cors());
@@ -61,7 +63,6 @@ const SLUGGER_CONFIG = {
 };
 
 const lookupCache = { players: new Map(), teams: new Map(), ballparks: new Map() };
-const pitchDataCache = new Map(); // Cache pitch data by date
 
 const TEAM_DISPLAY_NAMES = {
   'YOR': 'York Revolution', 'LI': 'Long Island Ducks', 'LAN': 'Lancaster Stormers',
@@ -92,16 +93,19 @@ async function sluggerRequest(endpoint, params = {}) {
  * @returns {Promise<Array>} Combined array of all records across all pages.
  */
 async function fetchAllPages(endpoint, params = {}) {
+  const MAX_PAGES = 500;
   let allData = [], page = 1, hasMore = true;
-  while (hasMore && page <= 10) {
+  while (hasMore && page <= MAX_PAGES) {
     const response = await sluggerRequest(endpoint, { ...params, page, limit: 1000 });
     if (response.success && response.data) {
       const items = Array.isArray(response.data) ? response.data : [response.data];
       allData = allData.concat(items);
       hasMore = items.length === 1000;
+      if (hasMore) console.log(`  Fetching page ${page + 1} (${allData.length} records so far)...`);
       page++;
     } else hasMore = false;
   }
+  if (page > MAX_PAGES) console.warn(`⚠️  fetchAllPages hit the ${MAX_PAGES}-page safety ceiling on ${endpoint}`);
   return allData;
 }
 
@@ -167,21 +171,33 @@ function getTeamName(code) {
  * @returns {Promise<Array>} Array of raw pitch objects, or empty array on error.
  */
 async function fetchPitchesByDateRange(startDateStr, endDateStr) {
-  const cacheKey = `${startDateStr}_${endDateStr}`;
+  const cacheDir = path.join(__dirname, 'cache');
+  if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
+  const cacheFile = path.join(cacheDir, `cache_${startDateStr}_${endDateStr}.json`);
 
-  if (pitchDataCache.has(cacheKey)) {
-    const cached = pitchDataCache.get(cacheKey);
-    console.log(`✅ Cache hit: returning ${cached.length} pitches for ${startDateStr} to ${endDateStr}`);
-    return cached;
+  if (fs.existsSync(cacheFile)) {
+    console.log(`💾 Disk cache hit: streaming ${cacheFile}`);
+    const streamJsonDir = path.dirname(require.resolve('stream-json'));
+    const streamArray = require(path.join(streamJsonDir, 'streamers', 'stream-array.js'));
+    const filtered = await new Promise((resolve, reject) => {
+      const items = [];
+      const pipeline = streamArray.withParserAsStream();
+      pipeline.on('data', ({ value }) => items.push(value));
+      pipeline.on('finish', () => resolve(items));
+      pipeline.on('error', reject);
+      fs.createReadStream(cacheFile).pipe(pipeline);
+    });
+    console.log(`💾 Disk cache loaded: ${filtered.length} pitches`);
+    return filtered;
   }
 
     console.log(`Fetching date range from SLUGGER API: ${startDateStr} to ${endDateStr}`);
-    
+
     try {
         // This uses the legacy helper to automatically handle pagination if there are >1000 pitches!
-        const pitches = await fetchAllPages('/pitches', { 
-            date_range_start: startDateStr, 
-            date_range_end: endDateStr 
+        const pitches = await fetchAllPages('/pitches', {
+            date_range_start: startDateStr,
+            date_range_end: endDateStr
         });
 
         console.log(`✅ Success: Fetched ${pitches.length} pitches from API`);
@@ -192,12 +208,25 @@ async function fetchPitchesByDateRange(startDateStr, endDateStr) {
         });
         console.log(`✅ After date filter (${startDateStr} → ${endDateStr}): ${filtered.length} pitches`);
 
-        pitchDataCache.set(cacheKey, filtered);
+        await new Promise((resolve, reject) => {
+          const stream = fs.createWriteStream(cacheFile);
+          stream.on('error', reject);
+          stream.on('finish', resolve);
+          stream.write('[');
+          for (let i = 0; i < filtered.length; i++) {
+            stream.write(JSON.stringify(filtered[i]));
+            if (i < filtered.length - 1) stream.write(',');
+          }
+          stream.write(']');
+          stream.end();
+        });
+        console.log(`💾 Disk cache written: ${cacheFile}`);
+
         return filtered;
 
     } catch (error) {
         console.error("❌ Error fetching from SLUGGER API:", error);
-        return []; 
+        return [];
     }
 }
 
@@ -478,7 +507,8 @@ function transformPitchDataToTeams(pitchData, existingData = {}, maxVelocity = 9
 
       batterData.pitchZones.push({
         position: [Math.max(0, Math.min(100, xPos)), Math.max(0, Math.min(100, yPos))],
-        pitch: pitchType, good: isGoodPitch, zone: zone
+        pitch: pitchType, good: isGoodPitch, zone: zone,
+        pitcherThrows: pitch.pitcher_throws === 'Left' ? 'L' : 'R'
       });
     }
   });
@@ -775,23 +805,18 @@ const weaknessZonesHandler = async (req, res) => {
 
     const weaknessZones = calculateWeaknessZones(batter, confidenceThreshold);
 
-    let zonesToDisplay;
-    if (confidenceThreshold >= 75)      zonesToDisplay = 4;
-    else if (confidenceThreshold >= 50) zonesToDisplay = 8;
-    else if (confidenceThreshold >= 25) zonesToDisplay = 10;
-    else                                zonesToDisplay = 12;
+    const zonesToDisplay = confidenceThreshold >= 75 ? 4 : confidenceThreshold >= 50 ? 8 : undefined;
 
     const sortedZones = Object.entries(weaknessZones)
       .map(([zone, data]) => ({
         zone,
-        weaknessScore: Math.round(data.weaknessScore * 10) / 10,
+        vulnerabilityScore: Math.round(data.vulnerabilityScore * 10) / 10,
         sampleSize: data.sampleSize,
-        badOutcomes: data.badOutcomes,
-        confidence: data.confidence,
+        severity: data.severity,
         whiffs: data.whiffs,
         weakContact: data.weakContact
       }))
-      .sort((a, b) => b.weaknessScore - a.weaknessScore)
+      .sort((a, b) => a.vulnerabilityScore - b.vulnerabilityScore)
       .slice(0, zonesToDisplay);
 
     res.json({
@@ -799,7 +824,7 @@ const weaknessZonesHandler = async (req, res) => {
       zones: sortedZones,
       metadata: {
         threshold: confidenceThreshold,
-        zonesDisplayed: zonesToDisplay,
+        zonesDisplayed: zonesToDisplay ?? 'all',
         totalZonesAnalyzed: Object.keys(weaknessZones).length,
         batter: selectedBatter,
         team: selectedTeam
@@ -818,70 +843,88 @@ if (BASE_PATH) {
 }
 
 /**
- * Scores each strike zone for a batter based on bad outcomes (whiffs + weak contact).
- * Only zones that meet the minimum sample size for the given confidence threshold are included.
+ * Scores each strike zone for a batter using the three-metric rank-based vulnerability formula.
+ * Zones are ranked by Whiff Rate (45%), Weak Contact Rate (35%), and Chase/Foul Rate (20%).
+ * A rank of 0 = worst (most vulnerable); the weighted sum produces a Vulnerability Score (0–100).
+ * Only zones meeting the mode-specific minimum pitch count are included, and results are
+ * filtered to the severity tier(s) allowed by the active confidence mode.
  * @param {Object} batter - A single batter object from transformPitchDataToTeams output.
- * @param {number} confidenceThreshold - Slider value (0–100) controlling minimum sample size.
- * @returns {Object} Map of zone keys to { weaknessScore, sampleSize, badOutcomes, confidence, whiffs, weakContact }.
+ * @param {number} confidenceThreshold - Slider value (0–100): 75–100 = Strict, 50–74 = Balanced, 0–49 = Broad.
+ * @returns {Object} Map of zone keys to { vulnerabilityScore, sampleSize, severity, whiffs, weakContact }.
  */
 function calculateWeaknessZones(batter, confidenceThreshold) {
-  const weaknessZones = {};
-  
-  // get all pitch zones from batter's data
   const zoneStats = batter.zoneAnalysis || {};
-  
-  // min. pitches required based on confidence threshold
+
+  // Mode-specific parameters
   const minPitchesRequired = calculateMinPitches(confidenceThreshold);
-  
+  const maxScore = confidenceThreshold >= 75 ? 20 : confidenceThreshold >= 50 ? 35 : 60;
+
+  // Step 1: compute raw percentages for zones that meet the minimum pitch count
+  const zoneScores = {};
   Object.entries(zoneStats).forEach(([zone, stats]) => {
-    if (stats.pitches >= minPitchesRequired) {
-      // calculate weakness score based on bad outcomes
-      // bad outcomes = whiffs + weak contact
-      const badOutcomes = (stats.whiffs || 0) + (stats.weakContact || 0);
-      const weaknessScore = (badOutcomes / stats.pitches) * 100;
-      
-      // calculate confidence level
-      const confidence = calculateZoneConfidence(stats.pitches, badOutcomes);
-      
-      weaknessZones[zone] = {
-        weaknessScore,
-        sampleSize: stats.pitches,
-        badOutcomes,
-        confidence,
-        whiffs: stats.whiffs || 0,
-        weakContact: stats.weakContact || 0
-      };
-    }
+    if ((stats.pitches || 0) < minPitchesRequired) return;
+    if ((stats.swings || 0) === 0) return;
+    const whiff_percent       = (stats.whiffs      || 0) / stats.swings * 100;
+    const chase_percent       = (stats.fouls       || 0) / stats.swings * 100;
+    const weakContact_percent = stats.contact > 0 ? (stats.weakContact || 0) / stats.contact * 100 : 0;
+    zoneScores[zone] = { whiff_percent, chase_percent, weakContact_percent, stats };
   });
-  
+
+  const zones = Object.keys(zoneScores);
+  if (zones.length === 0) return {};
+
+  // Step 2: rank each metric across zones (rank 0 = highest rate = most vulnerable)
+  const getRank = (metric) => {
+    const values = zones.map(z => zoneScores[z][metric]);
+    const sorted = [...values].sort((a, b) => b - a);
+    const ranks = {};
+    zones.forEach(z => {
+      const idx = sorted.findIndex(v => Math.abs(v - zoneScores[z][metric]) < 0.0001);
+      ranks[z] = zones.length === 1 ? 0 : ((idx === -1 ? 0 : idx) / (zones.length - 1)) * 100;
+    });
+    return ranks;
+  };
+
+  const whiffRanks       = getRank('whiff_percent');
+  const weakContactRanks = getRank('weakContact_percent');
+  const chaseRanks       = getRank('chase_percent');
+
+  // Step 3: compute weighted vulnerability score and filter by mode's severity ceiling
+  const weaknessZones = {};
+  zones.forEach(zone => {
+    const vulnerabilityScore = (
+      whiffRanks[zone]       * 0.45 +
+      weakContactRanks[zone] * 0.35 +
+      chaseRanks[zone]       * 0.20
+    );
+    if (vulnerabilityScore > maxScore) return;
+
+    const severity = vulnerabilityScore <= 20 ? 'CRITICAL'
+                   : vulnerabilityScore <= 35 ? 'MAJOR'
+                   :                            'MODERATE';
+
+    weaknessZones[zone] = {
+      vulnerabilityScore,
+      sampleSize:  zoneScores[zone].stats.pitches,
+      severity,
+      whiffs:      zoneScores[zone].stats.whiffs      || 0,
+      weakContact: zoneScores[zone].stats.weakContact || 0,
+    };
+  });
+
   return weaknessZones;
 }
 
 /**
  * Maps a confidence threshold slider value to the minimum pitch sample size required.
- * Higher thresholds demand larger samples to reduce noise.
+ * Strict (75–100): 10+ pitches. Balanced (50–74): 7+ pitches. Broad (0–49): 3+ pitches.
  * @param {number} confidenceThreshold - Value between 0 and 100.
  * @returns {number} Minimum number of pitches required for a zone to be included.
  */
 function calculateMinPitches(confidenceThreshold) {
-  if (confidenceThreshold >= 90) return 15;
   if (confidenceThreshold >= 75) return 10;
   if (confidenceThreshold >= 50) return 7;
-  if (confidenceThreshold >= 25) return 5;
   return 3;
-}
-
-/**
- * Returns a human-readable confidence label based on pitch count and bad outcome count.
- * @param {number} pitches - Total pitches thrown to this zone.
- * @param {number} badOutcomes - Count of whiffs + weak contact in this zone.
- * @returns {'High'|'Medium'|'Low'|'Very Low'} Confidence rating string.
- */
-function calculateZoneConfidence(pitches, badOutcomes) {
-  if (pitches >= 15 && badOutcomes >= 5) return 'High';
-  if (pitches >= 10 && badOutcomes >= 3) return 'Medium';
-  if (pitches >= 5) return 'Low';
-  return 'Very Low';
 }
 
 /**
@@ -1002,7 +1045,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 8080;
 
 async function startServer() {
-  // await populateLookupCaches();
+  await populateLookupCaches(); // previously commented out?
   app.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}/\n`);
   });

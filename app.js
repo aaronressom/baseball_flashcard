@@ -1,16 +1,20 @@
 let TEAMS_DATA = {};
 let METADATA = null;
+let cachedSeasonData = null;
+let cachedDateRange = { start: null, end: null, maxVelocity: null, pitchGroup: null };
 // Default settings
 const DEFAULT_SETTINGS = {
   // Zone analysis thresholds
   vulnerableZoneMinSwings: 3,
-  vulnerableZoneThreshold: 35,
+  vulnerableZoneThreshold: 60,
   hotZoneMinHardHits: 2,
   hotZoneHardHitThreshold: 40,
   // Pitch display settings
   maxPitchesDisplayed: 10,
   showOnlyGoodPitches: false,
   showOnlyBadPitches: false,
+  showAllZones: false,
+  showPitcherHand: false,
   pitchCircleSize: 32
 };
 let CURRENT_SETTINGS = { ...DEFAULT_SETTINGS };
@@ -100,52 +104,50 @@ function createElement(tag, props = {}, ...children) {
  * @param {Array<string>|null} [allowedZones=null] - Zone keys to show; null means show all.
  * @returns {HTMLElement} A div containing the SVG pitch zone graphic.
  */
-function createPitchZone(zones, handedness, allowedZones = null) {
-  const safeZones = Array.isArray(zones) ? zones : [];
-  // Apply pitch filtering based on settings
-  let filteredZones = safeZones;
-
-  // if the weakness slider has restricted zones, only show those
-  if (allowedZones !== null) {
-    if (allowedZones.length > 0) {
-      // Filter to only circles in vulnerable zones
-      filteredZones = filteredZones.filter(z => allowedZones.includes(z.zone));
-    } else {
-      // No vulnerable zones identified — at strict/balanced, show only good pitches
-      // At broad (threshold = 60), show everything
-      const threshold = CURRENT_SETTINGS.vulnerableZoneThreshold;
-      if (threshold <= 35) {
-        filteredZones = filteredZones.filter(z => z.good === true);
+function getFullyFilteredPitches(zones) {
+  let fz = Array.isArray(zones) ? [...zones] : [];
+  if (!CURRENT_SETTINGS.showAllZones) {
+    const az = (typeof app !== 'undefined' && app?.allowedZones) ?? null;
+    if (az !== null) {
+      if (az.length > 0) {
+        const abz = (typeof app !== 'undefined' && app?.allowedBadZones) ?? null;
+        fz = fz.filter(z => {
+          if (z.good === true)  return az.includes(z.zone);
+          if (z.good === false) return abz === null || abz.includes(z.zone);
+          return true;
+        });
+      } else {
+        if (CURRENT_SETTINGS.vulnerableZoneThreshold <= 35) {
+          fz = fz.filter(z => z.good === true);
+        }
       }
     }
   }
-
-  if (CURRENT_SETTINGS.showOnlyGoodPitches) {
-    filteredZones = filteredZones.filter(z => z.good === true);
-  } else if (CURRENT_SETTINGS.showOnlyBadPitches) {
-    filteredZones = filteredZones.filter(z => z.good === false);
+  if (CURRENT_SETTINGS.showOnlyGoodPitches && !CURRENT_SETTINGS.showOnlyBadPitches) {
+    fz = fz.filter(z => z.good === true);
+  } else if (CURRENT_SETTINGS.showOnlyBadPitches && !CURRENT_SETTINGS.showOnlyGoodPitches) {
+    fz = fz.filter(z => z.good === false);
   }
-  // Apply max pitches limit
-  let displayZones = filteredZones;
-  const maxPitches = CURRENT_SETTINGS.maxPitchesDisplayed;
-  if (filteredZones.length > maxPitches) {
-    const step = filteredZones.length / maxPitches;
-    displayZones = [];
-    for (let i = 0; i < maxPitches; i++) {
-      const index = Math.floor(i * step);
-      displayZones.push(filteredZones[index]);
-    }
-  }
+  return fz;
+}
+function createPitchZone(preFilteredZones, handedness) {
+  const filteredZones = Array.isArray(preFilteredZones) ? preFilteredZones : [];
+  const displayZones = filteredZones.slice(0, CURRENT_SETTINGS.maxPitchesDisplayed);
   const pitchElements = displayZones.map(zone => {
     const [x, y] = zone.position || [50, 50];
     const pitchType = zone.pitch || 'F';
     const isGood = zone.good === true;
     const colorClass = isGood ? 'pitch-circle--good' : 'pitch-circle--bad';
+    const pitcherHand = zone.pitcherThrows || '';
+    const handClass = pitcherHand === 'L' ? 'pitch-circle__hand--left' : 'pitch-circle__hand--right';
     return createElement('div', {
       className: `pitch-circle ${colorClass}`,
       style: { left: `${x}%`, top: `${y}%` },
-      title: `${pitchType} — ${isGood ? 'Attack here' : 'Avoid this location'}`
-    }, pitchType);
+      title: `${pitchType} (${pitcherHand}HP) — ${isGood ? 'Attack here' : 'Avoid this location'}`
+    },
+      createElement('span', { className: 'pitch-circle__type' }, pitchType),
+      CURRENT_SETTINGS.showPitcherHand ? createElement('span', { className: `pitch-circle__hand ${handClass}` }, pitcherHand) : null
+    );
   });
   const isLeftHanded = handedness === 'LHB';
   const batterClass = isLeftHanded ? 'batter-graphic-left-handed' : 'batter-graphic-right-handed';
@@ -161,10 +163,11 @@ function createPitchZone(zones, handedness, allowedZones = null) {
   }, svgImg);
   const pitchZone = createElement('div', { className: 'pitch-zone' }, ...pitchElements);
   pitchZone.style.setProperty('--pitch-circle-size', `${CURRENT_SETTINGS.pitchCircleSize}px`);
-  return createElement('div', { className: 'pitch-zone-container' },
+  const el = createElement('div', { className: 'pitch-zone-container' },
     batterGraphic,
     pitchZone
   );
+  return { el, count: displayZones.length, available: filteredZones.length };
 }
 /**
  * Builds the batter header block showing handedness badge, name, and total pitch count.
@@ -173,16 +176,17 @@ function createPitchZone(zones, handedness, allowedZones = null) {
  * @param {Array} pitchZones - Raw pitch zone array used only to compute total pitch count.
  * @returns {HTMLElement}
  */
-function createBatterGraphic(handedness, batterName, pitchZones) {
+function createBatterGraphic(handedness, batterName, renderedCount, availableCount) {
   const isLeftHanded = handedness === 'LHB';
-  const totalPitches = Array.isArray(pitchZones) ? pitchZones.length : 0;
   const handText = isLeftHanded ? 'LEFT-HANDED BATTER' : 'RIGHT-HANDED BATTER';
+  const countLabel = availableCount != null && availableCount !== renderedCount
+    ? `Showing: ${renderedCount} / ${availableCount} pitches`
+    : `Showing: ${renderedCount} pitches`;
   return createElement('div', { className: 'batter-section' },
     createElement('div', { className: 'handedness-badge' }, handText),
     createElement('div', { className: 'batter-info' },
       createElement('div', { className: 'batter-name' }, batterName || 'Unknown'),
-      createElement('div', { className: 'batter-stats' },
-        `Total Pitches: ${totalPitches}`)
+      createElement('div', { className: 'batter-stats' }, countLabel)
     )
   );
 }
@@ -218,10 +222,11 @@ const stripPercents = (text) => {
   const hotZones = [];
   if (zoneAnalysis) {
     const zoneScores = {};
+    const minPitches = CURRENT_SETTINGS.vulnerableZoneMinSwings;
 
     Object.entries(zoneAnalysis).forEach(([zone, stats]) => {
 
-      if (stats.swings < CURRENT_SETTINGS.vulnerableZoneMinSwings) return;
+      if ((stats.pitches || 0) < minPitches) return;
 
       const whiff_percent = (stats.whiffs / stats.swings) * 100;
       const chase_percent = (stats.fouls / stats.swings) * 100;
@@ -278,13 +283,19 @@ const stripPercents = (text) => {
     }
   }
   
-  vulnerableZones.sort((a, b) => b.score - a.score);
+  vulnerableZones.sort((a, b) => a.score - b.score);
   hotZones.sort((a, b) => b.hardHitPct - a.hardHitPct);
 
   const filteredVulnerableZones = vulnerableZones.filter(z => z.score <= vulnThreshold);
+  const zoneCap = vulnThreshold <= 20 ? 4 : vulnThreshold <= 35 ? 8 : undefined;
+  const cappedVulnerableZones = zoneCap !== undefined ? filteredVulnerableZones.slice(0, zoneCap) : filteredVulnerableZones;
+
+  const hotZoneCap = vulnThreshold <= 20 ? 2 : vulnThreshold <= 35 ? 4 : undefined;
+  const cappedHotZones = hotZoneCap !== undefined ? hotZones.slice(0, hotZoneCap) : hotZones;
 
   if (app) {
-    app.allowedZones = filteredVulnerableZones.map(z => z.zone);
+    app.allowedZones = cappedVulnerableZones.map(z => z.zone);
+    app.allowedBadZones = cappedHotZones.map(z => z.zone);
   }
   
   // let firstPitchText = stripPercents(tendencies?.firstStrike || `Swings ${firstPitchSwingRate} on first pitch`);
@@ -299,9 +310,9 @@ const stripPercents = (text) => {
   // 3 fixed confidence levels: threshold = max vulnerabilityScore allowed through
   // Score 0 = most vulnerable (CRITICAL), score 60 = least (MODERATE)
   const CONFIDENCE_LEVELS = [
-    { label: 'Broad',     desc: 'All Weaknesses',   threshold: 60, color: '#ef4444' },
-    { label: 'Balanced',  desc: 'Critical + Major',  threshold: 35, color: '#f59e0b' },
-    { label: 'Strict',    desc: 'Critical Only',     threshold: 20, color: '#22c55e' },
+    { label: 'Broad',     desc: 'All Weaknesses',   threshold: 60, minSwings: 3,  color: '#ef4444' },
+    { label: 'Balanced',  desc: 'Critical + Major',  threshold: 35, minSwings: 7,  color: '#f59e0b' },
+    { label: 'Strict',    desc: 'Critical Only',     threshold: 20, minSwings: 10, color: '#22c55e' },
   ];
 
 const activeLevel = CONFIDENCE_LEVELS.find(l => l.threshold === vulnThreshold) || CONFIDENCE_LEVELS[1];
@@ -318,7 +329,7 @@ const confidenceSlider = app ? createElement('div', { style: { padding: '16px', 
     ),
     createElement('div', { style: { display: 'flex', gap: '8px' } },
       ...CONFIDENCE_LEVELS.map(level => {
-        const isActive = level.threshold === vulnThreshold;
+        const isActive = !CURRENT_SETTINGS.showAllZones && level.threshold === vulnThreshold && level.minSwings === CURRENT_SETTINGS.vulnerableZoneMinSwings;
         return createElement('button', {
           style: {
             flex: '1',
@@ -333,7 +344,7 @@ const confidenceSlider = app ? createElement('div', { style: { padding: '16px', 
             transition: 'all 0.15s ease',
             lineHeight: '1.3',
           },
-          onclick: () => app.updateSetting('vulnerableZoneThreshold', level.threshold)
+          onclick: () => { CURRENT_SETTINGS.vulnerableZoneThreshold = level.threshold; CURRENT_SETTINGS.vulnerableZoneMinSwings = level.minSwings; app.render(); }
         },
           createElement('div', {}, level.label),
           createElement('div', { style: { fontSize: '10px', fontWeight: '500', opacity: isActive ? '0.9' : '0.7' } }, level.desc)
@@ -369,16 +380,25 @@ const confidenceSlider = app ? createElement('div', { style: { padding: '16px', 
 */
   // ------- CONFIDENCE SLIDER END -------
 
+  const confidenceWidget = CURRENT_SETTINGS.showAllZones
+    ? createElement('div', {
+        style: { position: 'relative', borderRadius: '12px', cursor: 'not-allowed' },
+        title: 'Weakness Confidence is disabled when the "Bypass Filter ⚠️" is ON'
+      },
+        createElement('div', { style: { opacity: '0.3', pointerEvents: 'none', filter: 'grayscale(1)' }, title: 'Weakness Confidence is disabled when the "Bypass Filter ⚠️" is ON' }, confidenceSlider),
+        createElement('span', { style: { position: 'absolute', top: '-6px', right: '-6px', fontSize: '14px', lineHeight: '1' }, title: 'Weakness Confidence is disabled when the "Bypass Filter ⚠️" is ON' }, '🔒')
+      )
+    : confidenceSlider;
   return createElement('div', { className: 'info-section' },
-    confidenceSlider,
+    confidenceWidget,
     createElement('div', { className: 'power-sequence stats-box' },
       createElement('h4', {}, 'First-Pitch Approach'),
       createElement('div', { className: 'power-sequence-text' }, firstPitchText)
     ),
-    filteredVulnerableZones.length > 0 ? createElement('div', { className: 'power-sequence vulnerable-zone' },
+    cappedVulnerableZones.length > 0 ? createElement('div', { className: 'power-sequence vulnerable-zone' },
     createElement('h4', {}, 'Vulnerable Zones'),
     createElement('div', { className: 'power-sequence-text' },
-    filteredVulnerableZones.slice(0, 2).map(z => `${z.zone} (${z.score})`).join(', '))
+    cappedVulnerableZones.slice(0, 2).map(z => `${z.zone} (${z.score})`).join(', '))
 ) : null,
     hotZones.length > 0 ? createElement('div', { className: 'power-sequence hot-zone' },
       createElement('h4', {}, 'Hot Zones (Avoid)'),
@@ -415,6 +435,9 @@ class FlashcardApp {
     this.selectedBatterIndex = 0;
     this.showInfoPanel = false;
     this.showSettingsPanel = false;
+    this.isSettingsDocked = false;
+    this.sortBy = 'number';
+    this.sortOrder = 'asc';
     const defaults = getDefaultSeasonDates();
     this.lastStartDate = defaults.start;
     this.lastEndDate = defaults.end;
@@ -449,9 +472,8 @@ class FlashcardApp {
         metaBits.length ? createElement('span', { className: 'meta' }, metaBits.join(' • ')) : null
       )
     );
-    const pitchSection = createElement('div', { className: 'pitch-zone-section' },
-      createPitchZone(batter.pitchZones || [], batter.handedness, app?.allowedZones || null)
-    );
+    const { el: pitchZoneInnerPrint } = createPitchZone(getFullyFilteredPitches(batter.pitchZones || []), batter.handedness);
+    const pitchSection = createElement('div', { className: 'pitch-zone-section' }, pitchZoneInnerPrint);
     const infoSection = createTendencies(batter.tendencies, batter.stats, batter.zoneAnalysis, batter.powerSequence, null);
     const widget = createElement('div', { className: 'widget print-widget' },
       header,
@@ -496,12 +518,34 @@ class FlashcardApp {
     this.render();
   }
   toggleSettings() {
-    this.showSettingsPanel = !this.showSettingsPanel;
+    if (this.isSettingsDocked) {
+      this.isSettingsDocked = false;
+    } else {
+      this.isSettingsDocked = true;
+      this.showSettingsPanel = false;
+    }
+    this.render();
+  }
+  toggleDock() {
+    this.isSettingsDocked = !this.isSettingsDocked;
+    // When docking, ensure panel is open; when undocking, close panel
+    this.showSettingsPanel = this.isSettingsDocked ? false : false;
     this.render();
   }
   updateSetting(key, value) {
     CURRENT_SETTINGS[key] = value;
     this.render();
+  }
+  updatePitchZone() {
+    const pzSection = this.container.querySelector('.pitch-zone-section');
+    if (!pzSection) return;
+    const lineup = TEAMS_DATA[this.selectedTeam];
+    if (!lineup) return;
+    const data = lineup[this.selectedBatterIndex];
+    if (!data) return;
+    const { el } = createPitchZone(getFullyFilteredPitches(data.pitchZones || []), data.handedness);
+    pzSection.innerHTML = '';
+    pzSection.appendChild(el);
   }
   resetSettings() {
     CURRENT_SETTINGS = { ...DEFAULT_SETTINGS };
@@ -518,13 +562,29 @@ class FlashcardApp {
    * @param {string} [pitchGroup='All'] - Pitch type filter: 'All', 'Fastballs', 'Breaking', or 'Offspeed'.
    * @returns {Promise<void>}
    */
-  async loadDataRange(startDate, endDate, maxVelocity = 105, seasonYear = null, pitchGroup = 'All') {
+  async loadDataRange(startDate, endDate, maxVelocity = 105, seasonYear = null, pitchGroup = 'All', dateLabel = null) {
 try {
       this.currentScreen = 'loading';
 
-      const pitchLabel = { All: 'All Pitches', Fastballs: 'Fastballs', Breaking: 'Breaking', Offspeed: 'Offspeed' }[pitchGroup] || 'All Pitches';
-      const base = `Loading ${pitchLabel} (with Max Velocity of ${maxVelocity} MPH)`;
-      this.loadingMessage = seasonYear ? `${base} for the ${seasonYear} Full Season...` : `${base}...`;
+      const pitchLabel = { All: 'All Pitches', Fastballs: 'Fastballs', Breaking: 'Breaking Balls', Offspeed: 'Offspeed' }[pitchGroup] || 'All Pitches';
+      // --- CACHE CHECK ---
+      const cacheCoversRange =
+        cachedSeasonData !== null &&
+        cachedDateRange.start !== null &&
+        startDate >= cachedDateRange.start &&
+        endDate <= cachedDateRange.end &&
+        cachedDateRange.maxVelocity === String(maxVelocity) &&
+        cachedDateRange.pitchGroup === pitchGroup;
+
+      if (cacheCoversRange) {
+        TEAMS_DATA = cachedSeasonData.teamsData;
+        METADATA = cachedSeasonData.metadata;
+        this.currentScreen = 'teamSelect';
+        this.render();
+        return;
+      }
+
+      this.loadingParams = { pitchGroup: pitchLabel, maxVelocity, seasonYear, startDate, endDate, dateLabel };
       this.render();
 
       const response = await fetch(
@@ -562,6 +622,10 @@ try {
         this.render();
         return;
       }
+
+      // --- CACHE WRITE ---
+      cachedSeasonData = { teamsData: data.teamsData, metadata: data.metadata };
+      cachedDateRange  = { start: startDate, end: endDate, maxVelocity: String(maxVelocity), pitchGroup };
 
       TEAMS_DATA = data.teamsData;
       METADATA = data.metadata;
@@ -610,7 +674,8 @@ try {
       // retain the dates in the calendar memory
       this.lastStartDate = startStr;
       this.lastEndDate = endStr;
-      this.loadDataRange(startStr, endStr, maxVel, seasonYear, pitchGroup);
+      const dateLabel = days === 7 ? 'Last 7 Days' : days === 30 ? 'Last 30 Days' : null;
+      this.loadDataRange(startStr, endStr, maxVel, seasonYear, pitchGroup, dateLabel);
 }
 
   showDateSelect() { this.currentScreen = 'dateSelect'; this.validationError = null; this.noDataError = null; this.render(); }
@@ -646,9 +711,26 @@ try {
       el.textContent = '.'.repeat(dotCount);
     }, 500);
 
+    const params = this.loadingParams || {};
+    const pillRow = [
+      createElement('div', { className: 'filter-pill pill-pitch' }, params.pitchGroup || 'All Pitches'),
+      createElement('div', { className: 'filter-pill pill-velo' }, `≤ ${params.maxVelocity || 105} MPH`),
+    ];
+    let seasonText;
+    if (params.dateLabel) {
+      seasonText = params.dateLabel;
+    } else if (params.seasonYear) {
+      seasonText = `${params.seasonYear} Full Season`;
+    } else {
+      const fmt = d => { if (!d) return '?'; const [y,m,day] = d.split('-'); return `${parseInt(m)}/${parseInt(day)}/${y.slice(2)}`; };
+      seasonText = `${fmt(params.startDate)} → ${fmt(params.endDate)}`;
+    }
+    pillRow.push(createElement('div', { className: 'filter-pill pill-season' }, seasonText));
+
     return createElement('div', { className: 'team-select-screen loading-screen' },
       createElement('h1', {}, 'Loading', dotsSpan),
-      createElement('p', {}, this.loadingMessage)
+      createElement('p', { className: 'loading-subtitle' }, 'This may take a few minutes...'),
+      createElement('div', { className: 'filter-pill-row' }, ...pillRow)
     );
   }
   renderError() {
@@ -861,7 +943,7 @@ createElement('div', {},
             }, 'Load Last 30 Days'),
             createElement('button', {
               // Deep Navy to match the "Filter Trackman Data" Title
-              className: 'team-btn', style: { padding: '8px 10px', fontSize: '13px', flex: 1, background: '#1e293b', border: 'none', boxShadow: 'none' },
+              className: 'team-btn', style: { padding: '8px 10px', fontSize: '13px', flex: 1, background: 'rgb(26, 71, 143)', border: 'none', boxShadow: 'none' },
               onclick: () => this.fetchSmartData(null)
             }, 'Load Last Full Season')
           )
@@ -920,7 +1002,7 @@ createElement('div', {},
             createElement('span', { className: 'stat-label' }, 'Players')
           ),
           createElement('div', { className: 'stat-item' },
-            createElement('span', { className: 'stat-number' }, totalPitches),
+            createElement('span', { className: 'stat-number stat-pitches' }, totalPitches),
             createElement('span', { className: 'stat-label' }, 'Pitches')
           )
         )
@@ -930,37 +1012,83 @@ createElement('div', {},
     return createElement('div', { className: 'team-select-screen' },
       createElement('div', { className: 'team-select-header' },
         createElement('h1', {}, 'Select a Team'),
-        createElement('p', {}, `${teams.length} teams available • Date range: ${METADATA?.startDate || 'N/A'} to ${METADATA?.endDate || 'N/A'}`),
-        createElement('button', { className: 'back-btn', onclick: () => this.showDateSelect() }, '← Change Dates')
+        createElement('div', { style: { display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '20px' } },
+          createElement('span', { className: 'info-bubble' }, `${teams.length} teams`),
+          createElement('span', { style: { fontSize: '18px', lineHeight: '1', alignSelf: 'center' } }, '⚾'),
+          createElement('span', { className: 'info-bubble' }, (() => { const fmt = d => { if (!d) return 'N/A'; const [y,m,day] = d.split('-'); return `${parseInt(m)}/${parseInt(day)}/${y.slice(2)}`; }; return `${fmt(METADATA?.startDate)} → ${fmt(METADATA?.endDate)}`; })())
+        ),
+        createElement('button', { className: 'back-btn', onclick: () => this.showDateSelect() }, '⮜ Change Dates')
       ),
       createElement('div', { className: 'team-grid' }, ...teamButtons)
     );
   }
 
+  sortRoster(lineup) {
+    return [...lineup].sort((a, b) => {
+      let cmp = 0;
+      if (this.sortBy === 'number') {
+        cmp = (a.jerseyNumber || 0) - (b.jerseyNumber || 0);
+      } else if (this.sortBy === 'name') {
+        cmp = (a.batter || '').localeCompare(b.batter || '');
+      } else if (this.sortBy === 'handedness') {
+        cmp = (a.handedness || '').localeCompare(b.handedness || '');
+        if (cmp === 0) cmp = (a.batter || '').localeCompare(b.batter || '');
+      } else if (this.sortBy === 'pitches') {
+        cmp = (a.stats?.totalPitches || 0) - (b.stats?.totalPitches || 0);
+      }
+      return this.sortOrder === 'asc' ? cmp : -cmp;
+    });
+  }
   renderLineup() {
     const lineup = TEAMS_DATA[this.selectedTeam];
-    const cards = lineup.map((batter, i) => {
+    const sorted = this.sortRoster(lineup);
+    const cards = sorted.map((batter) => {
+      const origIdx = lineup.indexOf(batter);
       return createElement('div', {
         className: 'mini-card',
-        onclick: () => this.showFlashcard(i)
+        onclick: () => this.showFlashcard(origIdx)
       },
-        createElement('div', { className: 'mini-card-order' }, `#${i + 1}`),
+        createElement('div', { className: 'mini-card-order' }, `#${batter.jerseyNumber || (origIdx + 1)}`),
         createElement('div', { className: 'mini-card-name' }, batter.batter),
-        createElement('div', { className: 'mini-card-hand' }, batter.handedness),
+        createElement('div', { className: `mini-card-hand ${batter.handedness}` }, batter.handedness),
         createElement('div', { className: 'mini-card-pitches' }, `${batter.stats?.totalPitches || 0} pitches`)
       );
     });
+    const sortOptions = [
+      { value: 'number',   label: 'Default' },
+      { value: 'name',     label: 'Name' },
+      { value: 'handedness', label: 'Handedness' },
+      { value: 'pitches', label: 'Total Pitches' },
+    ];
+    const self = this;
     return createElement('div', { className: 'lineup-screen' },
       createElement('div', { className: 'lineup-header' },
-        createElement('button', { className: 'back-btn', onclick: () => this.showTeamSelect() }, '← Teams'),
+        createElement('button', { className: 'back-btn', onclick: () => this.showTeamSelect() }, '⮜ Teams'),
         createElement('h1', {}, `${this.selectedTeam} Lineup`),
-        createElement('p', {}, `${lineup.length} batters`),
+        createElement('span', { className: 'info-bubble' }, `${lineup.length} batters`),
         createElement('button', { className: 'print-btn', onclick: () => this.printLineup() }, 'Print Lineup')
+      ),
+      createElement('div', { className: 'sort-container' },
+        createElement('select', {
+          className: 'sort-select',
+          onchange: (e) => { self.sortBy = e.target.value; self.render(); }
+        },
+          ...sortOptions.map(opt => createElement('option', { value: opt.value, ...(self.sortBy === opt.value ? { selected: true } : {}) }, opt.label))
+        ),
+        createElement('button', {
+          className: `sort-toggle-btn${self.sortOrder === 'desc' ? ' active' : ''}`,
+          onclick: () => { self.sortOrder = self.sortOrder === 'asc' ? 'desc' : 'asc'; self.render(); }
+        }, '⇅')
       ),
       createElement('div', { className: 'lineup-grid' }, ...cards)
     );
   }
-  renderSettingsPanel() {
+  renderSettingsPanel(rawCount = 0, filteredCount = 0, goodCount = 0, badCount = 0, displayedCount = 0, displayedGoodCount = 0, displayedBadCount = 0, statsTotalPitches = 0, docked = false) {
+    // Clamp down to sliderMax if the batter has fewer pitches than current setting
+    const sliderMax = CURRENT_SETTINGS.showAllZones ? rawCount : filteredCount;
+    if (CURRENT_SETTINGS.maxPitchesDisplayed > sliderMax) {
+      CURRENT_SETTINGS.maxPitchesDisplayed = sliderMax;
+    }
     const createSlider = (label, key, min, max, step = 1) => {
       return createElement('div', { className: 'setting-item' },
         createElement('label', { className: 'setting-label' }, label),
@@ -974,8 +1102,12 @@ createElement('div', {},
             className: 'setting-slider',
             oninput: (e) => {
               const value = parseFloat(e.target.value);
-              this.updateSetting(key, value);
+              CURRENT_SETTINGS[key] = value;
               e.target.parentElement.querySelector('.setting-number-input').value = value;
+              this.updatePitchZone();
+            },
+            onchange: (e) => {
+              this.updateSetting(key, parseFloat(e.target.value));
             }
           }),
           createElement('input', {
@@ -988,64 +1120,135 @@ createElement('div', {},
             oninput: (e) => {
               const value = parseFloat(e.target.value);
               if (value >= min && value <= max) {
-                this.updateSetting(key, value);
+                CURRENT_SETTINGS[key] = value;
                 e.target.parentElement.querySelector('.setting-slider').value = value;
+                this.updatePitchZone();
+              }
+            },
+            onchange: (e) => {
+              const value = parseFloat(e.target.value);
+              if (value >= min && value <= max) {
+                this.updateSetting(key, value);
               }
             }
           })
         )
       );
     };
-    const createCheckbox = (label, key) => {
+    const createCheckbox = (label, key, colorClass = '') => {
       return createElement('div', { className: 'setting-item' },
         createElement('label', { className: 'setting-label' }, label),
-        createElement('input', {
-          type: 'checkbox',
-          checked: CURRENT_SETTINGS[key],
-          className: 'setting-checkbox',
-          onchange: (e) => {
-            this.updateSetting(key, e.target.checked);
-          }
-        })
+        createElement('label', { className: 'toggle-switch' },
+          createElement('input', {
+            type: 'checkbox',
+            checked: CURRENT_SETTINGS[key],
+            className: 'toggle-input',
+            onchange: (e) => {
+              this.updateSetting(key, e.target.checked);
+            }
+          }),
+          createElement('span', { className: `toggle-track${colorClass ? ' ' + colorClass : ''}` })
+        )
       );
     };
+    // Dock toggle row shown in the header
+    const dockToggleRow = createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border)' } },
+      createElement('span', { style: { fontSize: '15px', fontWeight: '700', color: 'var(--text)' } }, 'Dock to Sidebar'),
+      createElement('label', { className: 'toggle-switch' },
+        createElement('input', {
+          type: 'checkbox',
+          checked: this.isSettingsDocked,
+          className: 'toggle-input',
+          onchange: () => this.toggleDock()
+        }),
+        createElement('span', { className: 'toggle-track' })
+      )
+    );
+
+    // Shared inner content (body + footer) — same in both modal and sidebar modes
+    const innerContent = [
+      createElement('div', { className: 'settings-modal__body' },
+        createElement('div', { className: 'settings-grid' },
+
+          // Pitch Display — full width
+          createElement('div', { className: 'settings-card full-width' },
+            createElement('div', { className: 'settings-card__header' }, 'Pitch Display'),
+            createElement('div', { className: 'stat-pills-container', style: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', marginBottom: '12px' } },
+              ...[
+                { label: 'Total Pitches',                   value: rawCount, bg: '#f1f5f9', border: '#cbd5e1', textColor: '#1e293b' },
+                { label: 'Matching Filters',                 value: displayedCount,    bg: '#eff6ff', border: '#93c5fd', textColor: '#1d4ed8', tooltip: 'Pitches currently shown on the grid (limited by Max Pitches Displayed).' },
+                { label: 'Attack Pitches (Strengths)',       value: displayedGoodCount, bg: '#f0fdf4', border: '#86efac', textColor: '#15803d' },
+                { label: 'Vulnerable Pitches (Weaknesses)',  value: displayedBadCount,  bg: '#fef2f2', border: '#fca5a5', textColor: '#b91c1c' },
+              ].map(({ label, value, bg, border, textColor, tooltip }) =>
+                createElement('div', { className: 'stat-pill', ...(tooltip ? { 'data-tooltip': tooltip } : {}), style: { display: 'inline-flex', flexDirection: 'column', alignItems: 'center', background: bg, border: `1px solid ${border}`, borderRadius: '10px', padding: '6px 14px', minWidth: '80px', position: 'relative' } },
+                  createElement('span', { style: { fontSize: '18px', fontWeight: '800', color: textColor, lineHeight: '1.1', textAlign: 'center', width: '100%' } }, value),
+                  createElement('span', { style: { fontSize: '11px', fontWeight: '500', color: '#64748b', marginTop: '2px', textAlign: 'center', width: '100%' } },
+                    label,
+                    tooltip ? createElement('span', { style: { marginLeft: '4px', fontSize: '11px', color: '#93c5fd', cursor: 'default' } }, '🛈') : null
+                  )
+                )
+              )
+            ),
+            createSlider('Max Pitches Displayed', 'maxPitchesDisplayed', 0, CURRENT_SETTINGS.showAllZones ? rawCount : filteredCount, 1),
+            createSlider('Pitch Circle Size (px)', 'pitchCircleSize', 32, 50, 1),
+            (() => {
+              const _bypassLocked = cachedDateRange.pitchGroup && cachedDateRange.pitchGroup !== 'All';
+              if (_bypassLocked && CURRENT_SETTINGS.showAllZones) CURRENT_SETTINGS.showAllZones = false;
+              if (!_bypassLocked) return createCheckbox('Show All Zones (Bypass Filter ⚠️)', 'showAllZones', 'toggle-yellow');
+              return createElement('div', {
+                className: 'setting-item',
+                title: 'Cannot show all zones while a pitch type filter (Fastballs, Breaking Balls, or Offspeed) is active',
+                style: { cursor: 'not-allowed' }
+              },
+                createElement('label', { className: 'setting-label', style: { opacity: '0.4' }, title: 'Cannot show all zones while a pitch type filter (Fastballs, Breaking Balls, or Offspeed) is active' }, 'Show All Zones (Bypass Filter ⚠️)'),
+                createElement('div', { style: { position: 'relative', display: 'inline-flex', alignItems: 'center' }, title: 'Cannot show all zones while a pitch type filter (Fastballs, Breaking Balls, or Offspeed) is active' },
+                  createElement('label', { className: 'toggle-switch', style: { opacity: '0.35', pointerEvents: 'none' }, title: 'Cannot show all zones while a pitch type filter (Fastballs, Breaking Balls, or Offspeed) is active' },
+                    createElement('input', { type: 'checkbox', checked: false, className: 'toggle-input', disabled: true }),
+                    createElement('span', { className: 'toggle-track toggle-yellow' })
+                  ),
+                  createElement('span', { style: { position: 'absolute', top: '-6px', right: '-8px', fontSize: '13px', lineHeight: '1' }, title: 'Cannot show all zones while a pitch type filter (Fastballs, Breaking Balls, or Offspeed) is active' }, '🔒')
+                )
+              );
+            })(),
+            createCheckbox('Show Pitcher Hand (L/R)', 'showPitcherHand'),
+            createCheckbox('Show Only Attack Pitches', 'showOnlyGoodPitches', 'toggle-green'),
+            createCheckbox('Show Only Vulnerable Pitches', 'showOnlyBadPitches', 'toggle-red')
+          ),
+
+          // Zone Analysis — full width
+          createElement('div', { className: 'settings-card full-width' },
+            createElement('div', { className: 'settings-card__header' }, 'Zone Analysis'),
+            createSlider('Vulnerable Zone Min Swings', 'vulnerableZoneMinSwings', 1, 10, 1),
+            createSlider('Hot Zone Min Hard Hits', 'hotZoneMinHardHits', 1, 10, 1),
+            createSlider('Hot Zone Hard Hit % Threshold', 'hotZoneHardHitThreshold', 0, 100, 5)
+          )
+        )
+      ),
+      createElement('div', { className: 'settings-modal__footer' },
+        createElement('button', { className: 'settings-modal__reset-btn', onclick: () => this.resetSettings() }, 'Reset to Defaults'),
+        docked
+          ? createElement('button', { className: 'settings-modal__close-btn', onclick: () => { this.isSettingsDocked = false; this.render(); } }, 'Close')
+          : createElement('button', { className: 'settings-modal__close-btn', onclick: () => this.toggleSettings() }, 'Close')
+      )
+    ];
+
+    const header = createElement('div', { className: 'settings-modal__header' },
+      createElement('h3', { className: 'settings-modal__title' }, 'Analysis Settings'),
+      createElement('p', { className: 'settings-modal__subtitle' }, 'Adjust thresholds and display preferences'),
+      !docked ? dockToggleRow : null
+    );
+
+    if (docked) {
+      return createElement('div', { id: 'settings-sidebar', className: 'settings-sidebar' },
+        header,
+        ...innerContent
+      );
+    }
+
     return createElement('div', { className: 'settings-overlay', onclick: () => this.toggleSettings() },
       createElement('div', { className: 'settings-modal', onclick: (e) => e.stopPropagation() },
-
-        // Header
-        createElement('div', { className: 'settings-modal__header' },
-          createElement('h3', { className: 'settings-modal__title' }, 'Analysis Settings'),
-          createElement('p', { className: 'settings-modal__subtitle' }, 'Adjust thresholds and display preferences')
-        ),
-
-        // Body — cards (only settings that are actually wired up)
-        createElement('div', { className: 'settings-modal__body' },
-          createElement('div', { className: 'settings-grid' },
-
-            // Pitch Display — full width
-            createElement('div', { className: 'settings-card full-width' },
-              createElement('div', { className: 'settings-card__header' }, 'Pitch Display'),
-              createSlider('Max Pitches Displayed', 'maxPitchesDisplayed', 1, 50, 1),
-              createSlider('Pitch Circle Size (px)', 'pitchCircleSize', 32, 50, 1),
-              createCheckbox('Show Only Good Pitches', 'showOnlyGoodPitches'),
-              createCheckbox('Show Only Bad Pitches', 'showOnlyBadPitches')
-            ),
-
-            // Zone Analysis — full width
-            createElement('div', { className: 'settings-card full-width' },
-              createElement('div', { className: 'settings-card__header' }, 'Zone Analysis'),
-              createSlider('Vulnerable Zone Min Swings', 'vulnerableZoneMinSwings', 1, 10, 1),
-              createSlider('Hot Zone Min Hard Hits', 'hotZoneMinHardHits', 1, 10, 1),
-              createSlider('Hot Zone Hard Hit % Threshold', 'hotZoneHardHitThreshold', 0, 100, 5)
-            )
-          )
-        ),
-
-        // Sticky footer
-        createElement('div', { className: 'settings-modal__footer' },
-          createElement('button', { className: 'settings-modal__reset-btn', onclick: () => this.resetSettings() }, 'Reset to Defaults'),
-          createElement('button', { className: 'settings-modal__close-btn', onclick: () => this.toggleSettings() }, 'Close')
-        )
+        header,
+        ...innerContent
       )
     );
   }
@@ -1056,32 +1259,32 @@ createElement('div', {},
       createElement('div', { className: 'header' },
         createElement('div', { className: 'header__title' },
           createElement('span', { className: 'name' }, data.batter || 'Unknown'),
-          createElement('span', { className: 'meta' }, data.handedness || ''),
+          createElement('span', { className: `mini-card-hand ${data.handedness}` }, data.handedness || ''),
           createElement('span', { className: 'meta' }, `• ${data.stats?.totalPitches || 0} pitches`),
           createElement('button', {
             className: 'info-btn',
             onclick: () => this.toggleInfo()
-          }, '?'),
+          }, '💡'),
           createElement('button', {
             className: 'settings-btn',
             onclick: () => this.toggleSettings()
-          }, '⚙')
+          }, '⚙️')
         ),
         createElement('div', { className: 'header__controls' },
-          createElement('span', { className: 'chip back-chip', onclick: () => this.showLineup(this.selectedTeam) }, '← Lineup'),
+          createElement('span', { className: 'chip back-chip', onclick: () => this.showLineup(this.selectedTeam) }, '⮜ Lineup'),
           createElement('span', { className: 'chip print-chip', onclick: () => this.printCurrentCard() }, 'Print'),
           createElement('span', {
             className: 'chip', onclick: () => {
               this.selectedBatterIndex = (this.selectedBatterIndex - 1 + lineup.length) % lineup.length;
               this.render();
             }
-          }, '◀ Prev'),
+          }, '⮜ Prev'),
           createElement('span', {
             className: 'chip', onclick: () => {
               this.selectedBatterIndex = (this.selectedBatterIndex + 1) % lineup.length;
               this.render();
             }
-          }, 'Next ▶')
+          }, 'Next ⮞')
         )
       ),
       this.showInfoPanel ? createElement('div', { className: 'info-overlay', onclick: () => this.toggleInfo() },
@@ -1089,7 +1292,7 @@ createElement('div', {},
 
           // Header
           createElement('div', { className: 'info-modal__header' },
-            createElement('h3', { className: 'info-modal__title' }, 'Understanding the Widget'),
+            createElement('h3', { className: 'info-modal__title' }, 'Understanding the Widget',), 
             createElement('p', { className: 'info-modal__subtitle' }, 'A guide to reading your batter flashcards')
           ),
 
@@ -1102,7 +1305,7 @@ createElement('div', {},
               createElement('div', { className: 'info-entry__content' },
                 createElement('div', { className: 'info-entry__title' }, 'Strike Zone'),
                 createElement('div', { className: 'info-entry__desc' },
-                  'Green circles = attack (whiffs, weak contact). Red circles = avoid (hard contact, balls in play). The batter icon shows their batting stance.'
+                  'Green circles = attack (whiffs, weak contact). Red circles = avoid (hard contact, balls in play). The batter icon shows their batting stance. The small L or R indicates if the pitch was thrown by a Left-Handed or Right-Handed pitcher.'
                 ),
                 createElement('div', { className: 'pitch-badge-row' },
                   ...[
@@ -1203,25 +1406,50 @@ createElement('div', {},
 
           // Footer
           createElement('div', { className: 'info-modal__footer' },
-            createElement('button', { className: 'info-modal__close-btn', onclick: () => this.toggleInfo() }, 'Got it')
+            createElement('button', { className: 'info-modal__close-btn', onclick: () => this.toggleInfo() }, 'Got it!')
           )
         )
       ) : null,
-      this.showSettingsPanel ? this.renderSettingsPanel() : null,
       (() => {
+        // createTendencies MUST run first — it sets app.allowedZones for the current threshold
         const tendenciesEl = createTendencies(data.tendencies, data.stats, data.zoneAnalysis, data.powerSequence, this);
-        const pitchZoneEl = createElement('div', { className: 'pitch-zone-section' }, createPitchZone(data.pitchZones || [], data.handedness, app?.allowedZones || null));
-        const batterEl = createBatterGraphic(data.handedness, data.batter, data.pitchZones);
+
+        // NOW read the freshly-updated app.allowedZones
+        const rawZones = data.pitchZones || [];
+        const fullyFilteredPitches = getFullyFilteredPitches(rawZones);
+        this._tendenciesEl = tendenciesEl;
+        this._fullyFilteredPitches = fullyFilteredPitches;
+        this._rawZoneCount = rawZones.length;
+        this._statsTotalPitches = data.stats?.totalPitches || rawZones.length;
+        const countSource = CURRENT_SETTINGS.showAllZones ? rawZones : fullyFilteredPitches;
+        this._goodCount = countSource.filter(z => z.good === true).length;
+        this._badCount = countSource.filter(z => z.good === false).length;
+        const displayedSlice = fullyFilteredPitches.slice(0, CURRENT_SETTINGS.maxPitchesDisplayed);
+        this._displayedCount = displayedSlice.length;
+        this._displayedGoodCount = displayedSlice.filter(z => z.good === true).length;
+        this._displayedBadCount = displayedSlice.filter(z => z.good === false).length;
+      })(),
+      (!this.isSettingsDocked && this.showSettingsPanel) ? this.renderSettingsPanel(this._rawZoneCount, this._fullyFilteredPitches.length, this._goodCount, this._badCount, this._displayedCount, this._displayedGoodCount, this._displayedBadCount, this._statsTotalPitches) : null,
+      (() => {
+        const { el: pitchZoneInner, count: renderedCount, available: availableCount } = createPitchZone(this._fullyFilteredPitches, data.handedness);
+        const pitchZoneEl = createElement('div', { className: 'pitch-zone-section' }, pitchZoneInner);
+        const batterEl = createBatterGraphic(data.handedness, data.batter, renderedCount, availableCount);
 
         const frag = document.createDocumentFragment();
         frag.appendChild(pitchZoneEl);
         frag.appendChild(batterEl);
-        frag.appendChild(tendenciesEl);
+        frag.appendChild(this._tendenciesEl);
         return frag;
-      }) ()
+      })()
     );
   }
   render() {
+    // Save sidebar scroll before re-render
+    const _savedScroll = (this.container.querySelector('.settings-sidebar') || {}).scrollTop || 0;
+    // Clean up existing sidebar and docked state
+    document.getElementById('settings-sidebar')?.remove();
+    this.container.classList.remove('app-sidebar-docked');
+
     this.container.innerHTML = '';
     let content;
     if (this.currentScreen === 'loading') content = this.renderLoading();
@@ -1231,6 +1459,15 @@ createElement('div', {},
     else if (this.currentScreen === 'lineup') content = this.renderLineup();
     else if (this.currentScreen === 'flashcard') content = this.renderFlashcard();
     this.container.appendChild(content);
+
+    // After renderFlashcard has run (populating this._rawZoneCount etc.), mount sidebar
+    if (this.isSettingsDocked && this.currentScreen === 'flashcard') {
+      const sidebar = this.renderSettingsPanel(this._rawZoneCount, this._fullyFilteredPitches.length, this._goodCount, this._badCount, this._displayedCount, this._displayedGoodCount, this._displayedBadCount, this._statsTotalPitches, true);
+      this.container.insertBefore(sidebar, this.container.firstChild);
+      this.container.classList.add('app-sidebar-docked');
+    }
+    // Restore sidebar scroll position after layout is resolved
+    if (_savedScroll > 0) { requestAnimationFrame(() => { const _ns = this.container.querySelector('.settings-sidebar'); if (_ns) _ns.scrollTop = _savedScroll; }); }
   }
 }
 let app;
