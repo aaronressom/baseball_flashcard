@@ -1516,35 +1516,85 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
 }
 
 @media print {
-  /* Just print the page exactly as displayed */
+  /* Force white background on ALL elements - crucial for mobile */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  
+  /* Force light color scheme - prevents dark mode on mobile */
+  :root {
+    color-scheme: light !important;
+  }
+  
+  /* Override any dark mode preferences */
+  @media (prefers-color-scheme: dark) {
+    html, body, #app, .widget, .pitch-zone, .info-section {
+      background: white !important;
+      color: black !important;
+    }
+  }
+  
+  /* Remove any background colors that might turn black */
+  body, #app, .container, .widget, .pitch-zone, 
+  .info-section, .tendencies, .power-sequence {
+    background: white !important;
+    background-color: white !important;
+  }
+  
+  /* Force black text */
+  body, #app, .name, .meta, .tendency-value, .threat-value {
+    color: black !important;
+  }
+  
+  /* Keep your layout */
   body {
     margin: 0;
     padding: 0;
     background: white !important;
   }
   
-  /* Don't hide anything - print everything visible */
   #app {
     display: block !important;
   }
   
-  /* Hide only print-specific containers if they exist */
   #print-container, #lineup-print-container {
     display: none !important;
   }
   
-  /* Ensure backgrounds and colors print */
-  * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  
-  /* Remove background colors that might cause issues */
-  body, #app, .container {
+  /* Preserve your mobile layout */
+  .widget {
+    grid-template-areas: "header" "pitch" "info";
+    grid-template-columns: 1fr;
+    width: 100% !important;
     background: white !important;
   }
   
-  /* Scale content to fit page width */
+  .pitch-zone {
+    width: min(80vw, 400px) !important;
+    height: auto !important;
+    margin: 0 auto !important;
+  }
+  
+  /* Ensure pitch circles print with colors */
+  .pitch-circle--good {
+    background: #10b981 !important;
+    color: white !important;
+  }
+  
+  .pitch-circle--bad {
+    background: #ef4444 !important;
+    color: white !important;
+  }
+  
+  /* Hide interactive elements */
+  .header__controls, .info-btn, .settings-btn,
+  .chip, .back-btn, .print-btn {
+    display: none !important;
+  }
+  
+  /* Scale to fit page */
   body {
     transform: scale(0.95);
     transform-origin: top center;
