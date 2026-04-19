@@ -167,15 +167,20 @@ function getTeamName(code) {
  * @param {string} endDateStr - End date in YYYY-MM-DD format.
  * @returns {Promise<Array>} Array of raw pitch objects, or empty array on error.
  */
-const pitchCache = new Map();
-
 async function fetchPitchesByDateRange(startDateStr, endDateStr) {
-  const cacheKey = `${startDateStr}_${endDateStr}`;
-  
-  // Check memory cache first
-  if (pitchCache.has(cacheKey)) {
-    console.log(`💾 Memory cache hit: ${cacheKey}`);
-    return pitchCache.get(cacheKey);
+  const cacheDir = process.env.VERCEL ? '/tmp/cache' : path.join(__dirname, 'cache');
+  if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+  const cacheFile = path.join(cacheDir, `cache_${startDateStr}_${endDateStr}.json`);
+
+  if (fs.existsSync(cacheFile)) {
+    try {
+      console.log(`💾 Disk cache hit: ${cacheFile}`);
+      const filtered = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+      console.log(`💾 Disk cache loaded: ${filtered.length} pitches`);
+      return filtered;
+    } catch (e) {
+      console.log(`💾 Cache read failed (${e.message}), fetching from API...`);
+    }
   }
 
   console.log(`Fetching date range from SLUGGER API: ${startDateStr} to ${endDateStr}`);

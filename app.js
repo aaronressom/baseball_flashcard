@@ -774,7 +774,7 @@ try {
           ),
           createElement('input', {
             id: 'maxVelocity', type: 'range', min: '0', max: '105', value: '105',
-            style: { width: '100%', cursor: 'pointer' },
+            style: { cursor: 'pointer' },
             oninput: (e) => {
               const val = e.target.value;
               const velDisplay = document.getElementById('velValue');
@@ -875,22 +875,60 @@ try {
           createElement('label', { style: { display: 'block', 'margin-bottom': '15px', 'font-weight': 'bold', 'font-size': '16px' } }, 
             'Custom Date Range'
           ),
-          createElement('div', { style: { display: 'flex', gap: '15px', marginBottom: '15px' } },
+          createElement('div', { className: 'date-inputs-row' },
             createElement('div', { style: { flex: 1 } },
               createElement('label', { style: { display: 'block', fontSize: '12px', marginBottom: '5px', color: '#666' } }, 'Start Date'),
+              createElement('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } },
               createElement('input', {
-                id: 'startDate', type: 'date',
+                id: 'startDate', type: 'text',
+                placeholder: 'YYYY-MM-DD',
                 value: this.lastStartDate || '',
-                style: { width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', cursor: 'pointer' }
-              })
+                style: { flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid #ccc', cursor: 'text', minWidth: 0 }
+              }),
+              createElement('button', {
+                type: 'button',
+                title: 'Open calendar',
+                style: { padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '16px', flexShrink: 0 },
+                onclick: () => {
+                  const picker = document.createElement('input');
+                  picker.type = 'date';
+                  picker.style.cssText = 'position:fixed;opacity:0;pointer-events:none;top:0;left:0;';
+                  const cur = document.getElementById('startDate').value;
+                  if (cur && /^\d{4}-\d{2}-\d{2}$/.test(cur)) picker.value = cur;
+                  document.body.appendChild(picker);
+                  picker.addEventListener('change', () => { document.getElementById('startDate').value = picker.value; picker.remove(); });
+                  picker.addEventListener('blur', () => setTimeout(() => picker.remove(), 200));
+                  picker.showPicker ? picker.showPicker() : picker.click();
+                }
+              }, '📅')
+            )
             ),
             createElement('div', { style: { flex: 1 } },
               createElement('label', { style: { display: 'block', fontSize: '12px', marginBottom: '5px', color: '#666' } }, 'End Date'),
+              createElement('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } },
               createElement('input', {
-                id: 'endDate', type: 'date',
+                id: 'endDate', type: 'text',
+                placeholder: 'YYYY-MM-DD',
                 value: this.lastEndDate || '',
-                style: { width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', cursor: 'pointer' }
-              })
+                style: { flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid #ccc', cursor: 'text', minWidth: 0 }
+              }),
+              createElement('button', {
+                type: 'button',
+                title: 'Open calendar',
+                style: { padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '16px', flexShrink: 0 },
+                onclick: () => {
+                  const picker = document.createElement('input');
+                  picker.type = 'date';
+                  picker.style.cssText = 'position:fixed;opacity:0;pointer-events:none;top:0;left:0;';
+                  const cur = document.getElementById('endDate').value;
+                  if (cur && /^\d{4}-\d{2}-\d{2}$/.test(cur)) picker.value = cur;
+                  document.body.appendChild(picker);
+                  picker.addEventListener('change', () => { document.getElementById('endDate').value = picker.value; picker.remove(); });
+                  picker.addEventListener('blur', () => setTimeout(() => picker.remove(), 200));
+                  picker.showPicker ? picker.showPicker() : picker.click();
+                }
+              }, '📅')
+            )
             )
           ),
           createElement('button', {
@@ -941,22 +979,33 @@ createElement('div', {},
           createElement('label', { style: { display: 'block', 'margin-bottom': '10px', 'font-weight': 'bold', 'font-size': '14px', color: '#666' } }, 
             'Quick Options'
           ),
-          createElement('div', { style: { display: 'flex', gap: '10px', justifyContent: 'center' } },
+          createElement('div', { style: { display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' } },
             createElement('button', {
               // Uses standard "Load Custom Range" blue
-              className: 'team-btn', style: { padding: '8px 10px', fontSize: '13px', flex: 1 },
+              className: 'team-btn', style: { padding: '8px 10px', fontSize: '13px', flex: 1, minWidth: '130px' },
               onclick: () => this.fetchSmartData(7)
             }, 'Load Last 7 Days'),
             createElement('button', {
               // Uses standard "Load Custom Range" blue
-              className: 'team-btn', style: { padding: '8px 10px', fontSize: '13px', flex: 1 },
+              className: 'team-btn', style: { padding: '8px 10px', fontSize: '13px', flex: 1, minWidth: '130px' },
               onclick: () => this.fetchSmartData(30)
             }, 'Load Last 30 Days'),
             createElement('button', {
               // Deep Navy to match the "Filter Trackman Data" Title
-              className: 'team-btn', style: { padding: '8px 10px', fontSize: '13px', flex: 1, background: 'rgb(26, 71, 143)', border: 'none', boxShadow: 'none' },
+              className: 'team-btn', style: { padding: '8px 10px', fontSize: '13px', flex: 1, minWidth: '130px', background: 'rgb(26, 71, 143)', border: 'none', boxShadow: 'none' },
               onclick: () => this.fetchSmartData(null)
-            }, 'Load Last Full Season')
+            }, 'Load Last Full Season'),
+            createElement('button', {
+              // Quick Demo — red pill button
+              className: 'team-btn', style: { padding: '8px 10px', fontSize: '13px', flex: 1, minWidth: '130px', background: '#dc2626', border: 'none', boxShadow: 'none' },
+              onclick: () => {
+                const maxVel = document.getElementById('maxVelocity').value;
+                const pitchGroup = document.getElementById('pitchGroup').value;
+                this.lastStartDate = '2025-04-21';
+                this.lastEndDate = '2025-04-28';
+                this.loadDataRange('2025-04-21', '2025-04-28', maxVel, null, pitchGroup);
+              }
+            }, 'Quick Demo (Apr 21–28, 2025)')
           )
         )
       )
@@ -1028,7 +1077,7 @@ createElement('div', {},
           createElement('span', { style: { fontSize: '18px', lineHeight: '1', alignSelf: 'center' } }, '⚾'),
           createElement('span', { className: 'info-bubble' }, (() => { const fmt = d => { if (!d) return 'N/A'; const [y,m,day] = d.split('-'); return `${parseInt(m)}/${parseInt(day)}/${y.slice(2)}`; }; return `${fmt(METADATA?.startDate)} → ${fmt(METADATA?.endDate)}`; })())
         ),
-        createElement('button', { className: 'back-btn', onclick: () => this.showDateSelect() }, '⮜ Change Dates')
+        createElement('button', { className: 'back-btn', onclick: () => this.showDateSelect() }, '← Change Dates')
       ),
       createElement('div', { className: 'team-grid' }, ...teamButtons)
     );
@@ -1074,7 +1123,7 @@ createElement('div', {},
     const self = this;
     return createElement('div', { className: 'lineup-screen' },
       createElement('div', { className: 'lineup-header' },
-        createElement('button', { className: 'back-btn', onclick: () => this.showTeamSelect() }, '⮜ Teams'),
+        createElement('button', { className: 'back-btn', onclick: () => this.showTeamSelect() }, '← Teams'),
         createElement('h1', {}, `${this.selectedTeam} Lineup`),
         createElement('span', { className: 'info-bubble' }, `${lineup.length} batters`),
         createElement('button', { className: 'print-btn', onclick: () => this.printLineup() }, 'Print Lineup')
@@ -1279,23 +1328,24 @@ createElement('div', {},
           createElement('button', {
             className: 'settings-btn',
             onclick: () => this.toggleSettings()
-          }, '⚙️')
+          }, '🛠️')
         ),
+        //test for fork
         createElement('div', { className: 'header__controls' },
-          createElement('span', { className: 'chip back-chip', onclick: () => this.showLineup(this.selectedTeam) }, '⮜ Lineup'),
+          createElement('span', { className: 'chip back-chip', onclick: () => this.showLineup(this.selectedTeam) }, '← Lineup'),
           createElement('span', { className: 'chip print-chip', onclick: () => this.printCurrentCard() }, 'Print'),
           createElement('span', {
             className: 'chip', onclick: () => {
               this.selectedBatterIndex = (this.selectedBatterIndex - 1 + lineup.length) % lineup.length;
               this.render();
             }
-          }, '⮜ Prev'),
+          }, '← Prev'),
           createElement('span', {
             className: 'chip', onclick: () => {
               this.selectedBatterIndex = (this.selectedBatterIndex + 1) % lineup.length;
               this.render();
             }
-          }, 'Next ⮞')
+          }, 'Next →')
         )
       ),
       this.showInfoPanel ? createElement('div', { className: 'info-overlay', onclick: () => this.toggleInfo() },
@@ -1372,7 +1422,7 @@ createElement('div', {},
 
             // Weakness Confidence
             createElement('div', { className: 'info-entry' },
-              createElement('div', { className: 'info-entry__icon', style: { background: '#d1fae5' } }, '🎚️'),
+              createElement('div', { className: 'info-entry__icon', style: { background: 'linear-gradient(to right, #ef4444 33%, #facc15 33% 66%, #22c55e 66%)', padding: '0', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'white', fontWeight: '800', letterSpacing: '1px' } }, '●●●'),
               createElement('div', { className: 'info-entry__content' },
                 createElement('div', { className: 'info-entry__title' }, 'Weakness Confidence'),
                 createElement('div', { className: 'info-entry__desc' },
@@ -1405,7 +1455,7 @@ createElement('div', {},
 
             // First Pitch
             createElement('div', { className: 'info-entry info-entry--last' },
-              createElement('div', { className: 'info-entry__icon', style: { background: '#dcfce7' } }, '🟢'),
+              createElement('div', { className: 'info-entry__icon', style: { background: '#dbeafe' } }, '🔵'),
               createElement('div', { className: 'info-entry__content' },
                 createElement('div', { className: 'info-entry__title' }, 'First-Pitch Approach'),
                 createElement('div', { className: 'info-entry__desc' },
@@ -1455,6 +1505,7 @@ createElement('div', {},
     );
   }
   render() {
+    if (this.currentScreen === 'loading' || this.currentScreen === 'error') window.scrollTo(0, 0);
     // Save sidebar scroll before re-render
     const _savedScroll = (this.container.querySelector('.settings-sidebar') || {}).scrollTop || 0;
     // Clean up existing sidebar and docked state
