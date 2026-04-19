@@ -174,12 +174,12 @@ async function fetchPitchesByDateRange(startDateStr, endDateStr) {
 
   if (fs.existsSync(cacheFile)) {
     try {
-      console.log(`💾 Disk cache hit: ${cacheFile}`);
+      console.log(`Disk cache hit: ${cacheFile}`);
       const filtered = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-      console.log(`💾 Disk cache loaded: ${filtered.length} pitches`);
+      console.log(`Disk cache loaded: ${filtered.length} pitches`);
       return filtered;
     } catch (e) {
-      console.log(`💾 Cache read failed (${e.message}), fetching from API...`);
+      console.log(`Cache read failed (${e.message}), fetching from API...`);
     }
   }
 
@@ -204,7 +204,7 @@ async function fetchPitchesByDateRange(startDateStr, endDateStr) {
 
     // Store in memory cache instead of disk
     pitchCache.set(cacheKey, filtered);
-    console.log(`💾 Memory cache stored: ${cacheKey} (${filtered.length} pitches)`);
+    console.log(`Memory cache stored: ${cacheKey} (${filtered.length} pitches)`);
 
     // Optional: Limit cache size to prevent memory issues
     if (pitchCache.size > 50) {

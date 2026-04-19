@@ -1611,6 +1611,7 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   .print-widget .header {
     padding: 10px 20px !important;
     border-bottom: 2px solid #cbd5e1 !important;
+    grid-area: header;
   }
   .print-widget .header .name {
     font-size: 30px !important;
