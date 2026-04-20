@@ -460,7 +460,7 @@ class FlashcardApp {
     this.ensurePrintContainers();
     return document.getElementById(id);
   }
-  buildPrintPage(batter, teamName, orderIndex) {
+buildPrintPage(batter, teamName, orderIndex) {
     const metaBits = [];
     if (teamName) metaBits.push(teamName);
     if (typeof orderIndex === 'number') metaBits.push(`#${orderIndex + 1}`);
@@ -472,7 +472,30 @@ class FlashcardApp {
         metaBits.length ? createElement('span', { className: 'meta' }, metaBits.join(' • ')) : null
       )
     );
+    
     const { el: pitchZoneInnerPrint } = createPitchZone(getFullyFilteredPitches(batter.pitchZones || []), batter.handedness);
+    
+    // THE iOS PRINT HACK: BUILD A PURE HTML GRID RIGHT BEFORE PRINTING
+    const zoneEl = pitchZoneInnerPrint.querySelector('.pitch-zone');
+    if (zoneEl) {
+      // 1. Force a physical white background block
+      const whiteBase = createElement('div', { 
+        style: { position: 'absolute', top: '0', left: '0', width: '100%', height: '100%', backgroundColor: '#ffffff', zIndex: '0' } 
+      });
+      // 2. Physical HTML grid lines
+      const v1 = createElement('div', { style: { position: 'absolute', top: '0', bottom: '0', left: '33.33%', width: '2px', backgroundColor: '#888888', zIndex: '1' } });
+      const v2 = createElement('div', { style: { position: 'absolute', top: '0', bottom: '0', left: '66.66%', width: '2px', backgroundColor: '#888888', zIndex: '1' } });
+      const h1 = createElement('div', { style: { position: 'absolute', left: '0', right: '0', top: '33.33%', height: '2px', backgroundColor: '#888888', zIndex: '1' } });
+      const h2 = createElement('div', { style: { position: 'absolute', left: '0', right: '0', top: '66.66%', height: '2px', backgroundColor: '#888888', zIndex: '1' } });
+      
+      // Inject them at the very back of the pitch zone (behind the pitches)
+      zoneEl.insertBefore(h2, zoneEl.firstChild);
+      zoneEl.insertBefore(h1, zoneEl.firstChild);
+      zoneEl.insertBefore(v2, zoneEl.firstChild);
+      zoneEl.insertBefore(v1, zoneEl.firstChild);
+      zoneEl.insertBefore(whiteBase, zoneEl.firstChild);
+    }
+
     const pitchSection = createElement('div', { className: 'pitch-zone-section' }, pitchZoneInnerPrint);
     const infoSection = createTendencies(batter.tendencies, batter.stats, batter.zoneAnalysis, batter.powerSequence, null);
     const widget = createElement('div', { className: 'widget print-widget' },
