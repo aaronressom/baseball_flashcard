@@ -798,7 +798,7 @@ try {
     return createElement('div', { className: 'team-select-screen' },
       createElement('h1', {}, 'Batter Flashcard'),
       createElement('p', { style: { 'margin-bottom': '20px', opacity: '0.8' } },
-        'Start by Adjusting the Velocity, Pitch Type, and Selecting a Timeframe'
+        'Start by Adjusting the Velocity, Selecting a Pitch Type, and Choosing a Timeframe'
       ),
       
       createElement('div', {
