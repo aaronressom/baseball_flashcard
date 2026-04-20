@@ -2022,3 +2022,22 @@ button:active {
     justify-content: center !important;
   }
 }
+
+/* FORCE EMOJIS AND TEXT TO CENTER PERFECTLY INSIDE PILLS */
+.app-header .settings-btn, 
+.app-header .info-btn,
+.header__controls button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  line-height: 1 !important;
+  padding: 8px 16px !important; /* Standardizes the pill shape */
+}
+
+/* Ensure the emoji itself doesn't have weird margins */
+.app-header .settings-btn span, 
+.app-header .info-btn span {
+  display: inline-flex !important;
+  align-items: center !important;
+}

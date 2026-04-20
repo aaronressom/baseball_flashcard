@@ -482,16 +482,21 @@ class FlashcardApp {
     );
     return createElement('div', { className: 'print-page' }, widget);
   }
-  printCurrentCard() {
+printCurrentCard() {
     const lineup = TEAMS_DATA[this.selectedTeam];
     if (!lineup || lineup.length === 0) return;
+    
+    // CLEAR BOTH CONTAINERS TO PREVENT GHOST PRINTING
+    const singleContainer = this.getPrintContainer('print-container');
+    const lineupContainer = this.getPrintContainer('lineup-print-container');
+    singleContainer.innerHTML = '';
+    lineupContainer.innerHTML = '';
+
     const batter = lineup[this.selectedBatterIndex];
-    const container = this.getPrintContainer('print-container');
-    container.innerHTML = '';
-    container.appendChild(this.buildPrintPage(batter, this.selectedTeam, this.selectedBatterIndex));
+    singleContainer.appendChild(this.buildPrintPage(batter, this.selectedTeam, this.selectedBatterIndex));
 
     const printSize = Math.round(CURRENT_SETTINGS.pitchCircleSize * 2);
-    container.querySelectorAll('.pitch-zone').forEach(el => {
+    singleContainer.querySelectorAll('.pitch-zone').forEach(el => {
       el.style.setProperty('--pitch-circle-size', `${printSize}px`)
     });
 
@@ -499,19 +504,25 @@ class FlashcardApp {
     setTimeout(() => {
       window.print();
       setTimeout(() => window.scrollTo(0, savedScroll), 500); 
-    }, 150);
+    }, 150); 
   }
+
   printLineup() {
     const lineup = TEAMS_DATA[this.selectedTeam];
     if (!lineup || lineup.length === 0) return;
-    const container = this.getPrintContainer('lineup-print-container');
-    container.innerHTML = '';
+    
+    // CLEAR BOTH CONTAINERS TO PREVENT GHOST PRINTING
+    const singleContainer = this.getPrintContainer('print-container');
+    const lineupContainer = this.getPrintContainer('lineup-print-container');
+    singleContainer.innerHTML = '';
+    lineupContainer.innerHTML = '';
+
     lineup.forEach((batter, idx) => {
-      container.appendChild(this.buildPrintPage(batter, this.selectedTeam, idx));
+      lineupContainer.appendChild(this.buildPrintPage(batter, this.selectedTeam, idx));
     });
 
     const printSize = Math.round(CURRENT_SETTINGS.pitchCircleSize * 2);
-    container.querySelectorAll('.pitch-zone').forEach(el => {
+    lineupContainer.querySelectorAll('.pitch-zone').forEach(el => {
       el.style.setProperty('--pitch-circle-size', `${printSize}px`)
     });
 
@@ -1548,3 +1559,16 @@ if (document.readyState === 'loading') {
 } else {
   app = new FlashcardApp(document.getElementById('app'));
 }
+
+// MOBILE FIX: CONVERT HOVER TOOLTIPS TO TAPS
+document.addEventListener('click', (e) => {
+  // If the user taps something that has a tooltip message...
+  if (e.target && e.target.hasAttribute('title')) {
+    // And if it's an info span or an emoji...
+    if (e.target.tagName === 'SPAN' || e.target.textContent.includes('ⓘ') || e.target.textContent.includes('🔒')) {
+      // Prevent any other button clicks and show the message!
+      e.preventDefault();
+      alert(e.target.getAttribute('title'));
+    }
+  }
+});
