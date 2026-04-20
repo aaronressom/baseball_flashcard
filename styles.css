@@ -343,10 +343,11 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
 }
 
 .lineup-header h1 {
-  font-size: clamp(24px, 5vw, 32px);
+  font-size: clamp(28px, 5vw, 42px);
   font-weight: 800;
   margin-bottom: 8px;
   color: var(--text);
+  text-align: center;
 }
 
 .lineup-header p {
@@ -390,7 +391,7 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
 
 .print-btn {
   padding: 10px 20px;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: white;
   border: none;
   border-radius: 10px;
@@ -425,7 +426,7 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   border-radius: 99px;
   padding: 0;
   width: max-content;
-  margin: 0 8px 12px auto;
+  margin: 0 auto 12px;
 }
 
 .sort-select option {
@@ -476,6 +477,22 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
 .sort-toggle-btn.active {
   color: var(--accent);
   background: #eff6ff;
+}
+
+.sort-toggle-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.sort-toggle-btn:disabled:hover {
+  background: transparent;
+}
+
+.lineup-header__topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
 .lineup-grid {
@@ -715,9 +732,8 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
 
 .pitch-circle {
   position: absolute;
-  --pitch-circle-size: clamp(24px, 3vw, 32px);
-  width: var(--pitch-circle-size);
-  height: var(--pitch-circle-size);
+  width: var(--pitch-circle-size, 32px);
+  height: var(--pitch-circle-size, 32px);
   border-radius: 50%;
   font-weight: 700;
   font-size: calc(var(--pitch-circle-size) * 0.4);
@@ -800,7 +816,7 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
 }
 
 .info-btn, .settings-btn {
-  background: #93c5fd;
+  background: #60a5fa;
   color: #1e40af;
   border: none;
   border-radius: 12px;
@@ -818,7 +834,7 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   box-shadow: var(--shadow-md);
 }
 
-.settings-btn { background: #fb923c; color: #ffffff; }
+.settings-btn { background: #fdba74; color: #c2410c; }
 
 /* Information & Tendencies Cards */
 .tendencies, .power-sequence {
@@ -1516,103 +1532,52 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
 }
 
 @media print {
-  /* Keep existing print styles, then add/override these: */
-  
-  /* Force 3-column layout on print */
-  .print-widget {
-    display: grid !important;
-    grid-template-areas: "graphic pitch info" !important;
-    grid-template-columns: auto 1.5fr 0.6fr !important;  /* grid gets biggest */
-    grid-template-rows: auto !important;
-    gap: 16px !important;
-    width: 100% !important;
-    max-width: none !important;
-    align-items: start !important;
+  /* Hide the app UI — show only the off-screen print containers */
+  #app { display: none !important; }
+  #print-container, #lineup-print-container {
+    position: static !important;
+    left: 0 !important;
+    top: 0 !important;
   }
-  
-  /* Show batter graphic in print */
-  .print-widget .batter-graphic-section {
-    display: flex !important;
-    grid-area: graphic !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 10px !important;
+
+  /* Force browsers to print background colors & images */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
-  
-  .print-widget .batter-graphic {
-    display: block !important;
-    width: 100px !important;
-    height: auto !important;
-  }
-  
-  .print-widget .batter-graphic img {
-    width: 100% !important;
-    height: auto !important;
-  }
-  
-  /* Pitch zone - middle and largest */
-  .print-widget .pitch-zone-section {
-    grid-area: pitch !important;
-    display: flex !important;
-    justify-content: center !important;
-    align-items: center !important;
-    padding: 10px !important;
-  }
-  
-  .print-widget .pitch-zone {
-    width: 450px !important;
-    height: 450px !important;
-    margin: 0 auto !important;
-  }
-  
-  /* Info section - right column */
+
+  @page { margin: 0.5in; }
+
+  /* Page break between each player in lineup print */
+  .print-page { page-break-after: always; break-after: page; }
+  .print-page:last-child { page-break-after: avoid; break-after: avoid; }
+
+  /* Hide interactive nav controls */
+  .print-widget .header__controls,
+  .print-widget .info-btn,
+  .print-widget .settings-btn { display: none !important; }
+
+  /* Solid fill colors for pitch circles (gradient strips in print) */
+  .print-widget .pitch-circle--good { background: #10b981 !important; }
+  .print-widget .pitch-circle--bad  { background: #ef4444 !important; }
+
+  /* Keep pitch zone grid lines */
+  .print-widget .pitch-zone::after { background-color: transparent !important; }
+
+  /* Info section: don't clip, remove sidebar border */
   .print-widget .info-section {
-    grid-area: info !important;
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 12px !important;
-    padding: 10px !important;
-    border-left: 1px solid #ccc !important;
-    border-top: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border-left: none !important;
+    border-top: 1px solid #e2e8f0 !important;
   }
-  
-  /* Hide the header in print (or keep minimal) */
-  .print-widget .header {
-    display: none !important;
-  }
-  
-  /* Adjust pitch circles size for print */
-  .print-widget .pitch-circle {
-    --pitch-circle-size: 28px !important;
-  }
-  
-  /* Keep info section content readable */
-  .print-widget .tendencies, 
-  .print-widget .power-sequence {
-    padding: 8px !important;
-    margin: 0 !important;
-  }
-  
-  .print-widget .tendency-label,
-  .print-widget .threat-label {
-    font-size: 10px !important;
-  }
-  
-  .print-widget .tendency-value,
-  .print-widget .threat-value {
-    font-size: 11px !important;
-  }
-  
-  .print-widget .power-sequence-text {
-    font-size: 11px !important;
-  }
-  
-  /* Ensure white background on everything */
+
+  /* White backgrounds */
   .print-widget,
   .print-widget .pitch-zone-section,
-  .print-widget .info-section,
-  .print-widget .batter-graphic-section {
+  .print-widget .info-section {
     background: white !important;
+    color: #0f172a !important;
   }
 }
 
@@ -1833,12 +1798,13 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
     padding: 16px;
   }
   .lineup-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
     margin-bottom: 16px;
+  }
+  .lineup-header__topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
   }
   .lineup-header .back-btn,
   .lineup-header .print-btn {
@@ -1846,9 +1812,8 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
     transform: none;
   }
   .lineup-header h1 {
-    font-size: 20px;
-    margin: 0;
-    flex: 0 0 100%;
+    font-size: 22px;
+    margin: 0 0 8px;
     text-align: center;
     word-break: break-word;
   }

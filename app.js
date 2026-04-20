@@ -79,8 +79,8 @@ function createElement(tag, props = {}, ...children) {
       Object.assign(el.style, value);
     } else if (key.startsWith('on') && typeof value === 'function') {
       el.addEventListener(key.substring(2).toLowerCase(), value);
-    } else if (key === 'checked') {
-      el.checked = Boolean(value);
+    } else if (key === 'checked' || key === 'disabled') {
+      el[key] = Boolean(value);
     } else {
       el.setAttribute(key, value);
     }
@@ -889,16 +889,17 @@ try {
                 type: 'button',
                 title: 'Open calendar',
                 style: { padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '16px', flexShrink: 0 },
-                onclick: () => {
+                onclick: (e) => {
                   const picker = document.createElement('input');
                   picker.type = 'date';
-                  picker.style.cssText = 'position:fixed;opacity:0;pointer-events:none;top:0;left:0;';
+                  const _r0 = e.currentTarget.getBoundingClientRect();
+                  picker.style.cssText = `position:fixed;opacity:0.01;top:${_r0.top}px;left:${_r0.left}px;width:${_r0.width}px;height:${_r0.height}px;`;
                   const cur = document.getElementById('startDate').value;
                   if (cur && /^\d{4}-\d{2}-\d{2}$/.test(cur)) picker.value = cur;
                   document.body.appendChild(picker);
                   picker.addEventListener('change', () => { document.getElementById('startDate').value = picker.value; picker.remove(); });
                   picker.addEventListener('blur', () => setTimeout(() => picker.remove(), 200));
-                  picker.showPicker ? picker.showPicker() : picker.click();
+                  try { picker.showPicker(); } catch(ex) { picker.focus(); picker.click(); }
                 }
               }, '📅')
             )
@@ -916,16 +917,17 @@ try {
                 type: 'button',
                 title: 'Open calendar',
                 style: { padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '16px', flexShrink: 0 },
-                onclick: () => {
+                onclick: (e) => {
                   const picker = document.createElement('input');
                   picker.type = 'date';
-                  picker.style.cssText = 'position:fixed;opacity:0;pointer-events:none;top:0;left:0;';
+                  const _r0 = e.currentTarget.getBoundingClientRect();
+                  picker.style.cssText = `position:fixed;opacity:0.01;top:${_r0.top}px;left:${_r0.left}px;width:${_r0.width}px;height:${_r0.height}px;`;
                   const cur = document.getElementById('endDate').value;
                   if (cur && /^\d{4}-\d{2}-\d{2}$/.test(cur)) picker.value = cur;
                   document.body.appendChild(picker);
                   picker.addEventListener('change', () => { document.getElementById('endDate').value = picker.value; picker.remove(); });
                   picker.addEventListener('blur', () => setTimeout(() => picker.remove(), 200));
-                  picker.showPicker ? picker.showPicker() : picker.click();
+                  try { picker.showPicker(); } catch(ex) { picker.focus(); picker.click(); }
                 }
               }, '📅')
             )
@@ -1123,10 +1125,14 @@ createElement('div', {},
     const self = this;
     return createElement('div', { className: 'lineup-screen' },
       createElement('div', { className: 'lineup-header' },
-        createElement('button', { className: 'back-btn', onclick: () => this.showTeamSelect() }, '← Teams'),
+        createElement('div', { className: 'lineup-header__topbar' },
+          createElement('button', { className: 'back-btn', onclick: () => this.showTeamSelect() }, '← Teams'),
+          createElement('button', { className: 'print-btn', onclick: () => this.printLineup() }, 'Print Lineup')
+        ),
         createElement('h1', {}, `${this.selectedTeam} Lineup`),
-        createElement('span', { className: 'info-bubble' }, `${lineup.length} batters`),
-        createElement('button', { className: 'print-btn', onclick: () => this.printLineup() }, 'Print Lineup')
+        createElement('div', { style: { textAlign: 'center', marginBottom: '8px' } },
+          createElement('span', { className: 'info-bubble' }, `${lineup.length} batters`)
+        )
       ),
       createElement('div', { className: 'sort-container' },
         createElement('select', {
@@ -1137,6 +1143,7 @@ createElement('div', {},
         ),
         createElement('button', {
           className: `sort-toggle-btn${self.sortOrder === 'desc' ? ' active' : ''}`,
+          disabled: self.sortBy === 'number',
           onclick: () => { self.sortOrder = self.sortOrder === 'asc' ? 'desc' : 'asc'; self.render(); }
         }, '⇅')
       ),
@@ -1505,6 +1512,7 @@ createElement('div', {},
     );
   }
   render() {
+    const _wsy = (this.currentScreen !== 'loading' && this.currentScreen !== 'error') ? window.scrollY : 0;
     if (this.currentScreen === 'loading' || this.currentScreen === 'error') window.scrollTo(0, 0);
     // Save sidebar scroll before re-render
     const _savedScroll = (this.container.querySelector('.settings-sidebar') || {}).scrollTop || 0;
@@ -1530,6 +1538,7 @@ createElement('div', {},
     }
     // Restore sidebar scroll position after layout is resolved
     if (_savedScroll > 0) { requestAnimationFrame(() => { const _ns = this.container.querySelector('.settings-sidebar'); if (_ns) _ns.scrollTop = _savedScroll; }); }
+    if (_wsy > 0) requestAnimationFrame(() => window.scrollTo(0, _wsy));
   }
 }
 let app;
