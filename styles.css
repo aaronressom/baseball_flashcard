@@ -1440,8 +1440,63 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   height: 0 !important;
 }
 
+/* Disable click animations for Print buttons to prevent UI jumping */
+.header__controls button:active {
+  transform: none !important;
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Specific override if your button uses a scale effect */
+button:active {
+  transform: scale(1) !important;
+}
+
 /* ── Responsive: collapse to 1 column on small screens ── */
 @media (max-width: 720px) {
+  /* FORCE HEADER INTO A CENTERED 3-LINE STACK */
+  .app-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    padding-top: 10px !important;
+    gap: 12px !important;
+  }
+
+  /* Line 1: Name, Handedness, Pitches */
+  .header__title {
+    display: flex !important;
+    justify-content: center !important;
+    width: 100% !important;
+    order: 1 !important;
+  }
+
+  /* Line 2: Tool Icon and Lightbulb Icon */
+  .app-header .settings-btn, 
+  .app-header .info-btn {
+    position: static !important; /* Removes any floating/absolute positioning */
+    display: inline-block !important;
+    margin: 0 10px !important;
+  }
+  
+  /* We use a pseudo-container via flex-order to group the icons together visually */
+  .header-icons-wrapper {
+    display: flex !important;
+    justify-content: center !important;
+    width: 100% !important;
+    order: 2 !important;
+  }
+
+  /* Line 3: The Pills (Prev, Next, Print, Lineup) */
+  .header__controls {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    width: 100% !important;
+    gap: 8px !important;
+    order: 3 !important;
+  }
   .settings-modal {
     max-width: 100%;
     border-radius: 16px;
@@ -1609,14 +1664,32 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
     break-after: auto !important; 
   }
 
-  .print-widget {
+  /* THE iOS DARK MODE NUCLEAR HACK */
+  * {
+    color-scheme: light !important;
+  }
+
+  .print-page, .print-widget {
     width: 100% !important; 
     max-height: 10in !important; 
     display: flex !important;
     flex-direction: column !important;
-    background: transparent !important;
+    
+    /* Force white background */
+    background-color: #ffffff !important; 
+    
+    /* Paint over any dark mode inheritance with a massive white inner shadow */
+    box-shadow: inset 0 0 0 10000px #ffffff !important; 
+    -webkit-box-shadow: inset 0 0 0 10000px #ffffff !important;
+    
     border: none !important;
-    box-shadow: none !important;
+  }
+
+  /* Force the SVG Container to be white too */
+  .print-widget .pitch-zone {
+    background-color: #ffffff !important;
+    box-shadow: inset 0 0 0 1000px #ffffff !important;
+    -webkit-box-shadow: inset 0 0 0 1000px #ffffff !important;
   }
 
   /* THE GRID LINE FIX: Solid mid-gray shows up on both Black (iOS) and White (Desktop) backgrounds */
