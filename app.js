@@ -54,13 +54,10 @@ function getDefaultSeasonDates() {
  */
 function getFullSeasonRange() {
   const todayStr = new Date().toISOString().slice(0, 10);
-  if (todayStr < SEASON_2026.start) {
-    return { start: SEASON_2025.start, end: SEASON_2025.end, year: 2025 };
+  if (todayStr > SEASON_2026.end) {
+    return { start: SEASON_2026.start, end: SEASON_2026.end, year: 2026 };
   }
-  if (todayStr <= SEASON_2026.end) {
-    return { start: SEASON_2026.start, end: todayStr, year: 2026 };
-  }
-  return { start: SEASON_2026.start, end: SEASON_2026.end, year: 2026 };
+  return { start: SEASON_2025.start, end: SEASON_2025.end, year: 2025 };
 }
 /**
  * JSX-like helper that creates a DOM element with props and children.
@@ -665,6 +662,13 @@ try {
         return;
       }
 
+      // Snap progress to 100% before transitioning to teamSelect
+      const barFill = document.getElementById('loading-progress-fill');
+      if (barFill) {
+        barFill.style.transition = 'width 0.1s ease-out';
+        barFill.style.width = '100%';
+      }
+
       // --- CACHE WRITE ---
       cachedSeasonData = { teamsData: data.teamsData, metadata: data.metadata };
       cachedDateRange  = { start: startDate, end: endDate, maxVelocity: String(maxVelocity), pitchGroup };
@@ -706,6 +710,13 @@ try {
           };
           startStr = formatDate(start);
           endStr = formatDate(end);
+
+          if (startStr < SEASON_2026.start) {
+              this.validationError = `Insufficient data for ${days} days. The current season started on ${SEASON_2026.start}. Please select a Custom Date Range.`;
+              this.noDataError = null;
+              this.render();
+              return;
+          }
       } else {
           const season = getFullSeasonRange();
           startStr  = season.start;
@@ -720,7 +731,16 @@ try {
       this.loadDataRange(startStr, endStr, maxVel, seasonYear, pitchGroup, dateLabel);
 }
 
-  showDateSelect() { this.currentScreen = 'dateSelect'; this.validationError = null; this.noDataError = null; this.render(); }
+  showDateSelect() { 
+    this.currentScreen = 'dateSelect'; 
+    this.validationError = null; 
+    this.noDataError = null; 
+    cachedSeasonData = null;
+    cachedDateRange = { start: null, end: null, maxVelocity: null, pitchGroup: null };
+    this.lastStartDate = null;
+    this.lastEndDate = null;
+    this.render(); 
+  }
   showTeamSelect() { this.currentScreen = 'teamSelect'; this.selectedTeam = null; this.render(); }
   showLineup(team) {
     this.currentScreen = 'lineup';
@@ -753,6 +773,11 @@ try {
       el.textContent = '.'.repeat(dotCount);
     }, 500);
 
+    setTimeout(() => {
+      const barFill = document.getElementById('loading-progress-fill');
+      if (barFill) barFill.style.width = '90%';
+    }, 50);
+
     const params = this.loadingParams || {};
     const pillRow = [
       createElement('div', { className: 'filter-pill pill-pitch' }, params.pitchGroup || 'All Pitches'),
@@ -771,7 +796,38 @@ try {
 
     return createElement('div', { className: 'team-select-screen loading-screen' },
       createElement('h1', {}, 'Loading', dotsSpan),
-      createElement('p', { className: 'loading-subtitle' }, 'This may take a few minutes...'),
+      createElement('div', { 
+        style: { cursor: 'pointer', marginBottom: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' },
+        onclick: () => {
+           const barWrapper = document.getElementById('loading-progress-wrapper');
+           if (barWrapper) {
+             if (barWrapper.style.maxHeight === '0px') {
+               barWrapper.style.maxHeight = '20px';
+               barWrapper.style.marginTop = '10px';
+             } else {
+               barWrapper.style.maxHeight = '0px';
+               barWrapper.style.marginTop = '0px';
+             }
+           }
+        }
+      },
+        createElement('p', { className: 'loading-subtitle', style: { margin: 0 } }, 'This may take a few minutes ⏷'),
+        createElement('div', { 
+          id: 'loading-progress-wrapper',
+          style: { 
+            width: '100%', maxWidth: '250px', height: '10px', maxHeight: '0px', overflow: 'hidden', 
+            background: '#e2e8f0', borderRadius: '99px', transition: 'all 0.3s ease', marginTop: '0px'
+          }
+        },
+          createElement('div', { 
+            id: 'loading-progress-fill',
+            style: { 
+              width: '0%', height: '100%', background: 'linear-gradient(90deg, #3b82f6, #10b981)', 
+              borderRadius: '99px', transition: 'width 180s cubic-bezier(0.1, 0.8, 0.3, 1)' 
+            }
+          })
+        )
+      ),
       createElement('div', { className: 'filter-pill-row' }, ...pillRow)
     );
   }

@@ -2043,3 +2043,9 @@ button:active {
   margin-top: 8px !important;
   line-height: 1.4 !important;
 }
+
+@media (min-width: 769px) {
+  .pitch-zone-section, .pitch-zone-container {
+    background-color: transparent !important;
+  }
+}
