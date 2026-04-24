@@ -107,12 +107,7 @@ function getFullyFilteredPitches(zones) {
     const az = (typeof app !== 'undefined' && app?.allowedZones) ?? null;
     if (az !== null) {
       if (az.length > 0) {
-        const abz = (typeof app !== 'undefined' && app?.allowedBadZones) ?? null;
-        fz = fz.filter(z => {
-          if (z.good === true)  return az.includes(z.zone);
-          if (z.good === false) return abz === null || abz.includes(z.zone);
-          return true;
-        });
+        fz = fz.filter(z => z.good === true ? az.includes(z.zone) : true);
       } else {
         if (CURRENT_SETTINGS.vulnerableZoneThreshold <= 35) {
           fz = fz.filter(z => z.good === true);
@@ -296,7 +291,7 @@ const stripPercents = (text) => {
 
   if (app) {
     app.allowedZones = cappedVulnerableZones.map(z => z.zone);
-    app.allowedBadZones = cappedHotZones.map(z => z.zone);
+    app.allowedBadZones = cappedHotZones.length > 0 ? cappedHotZones.map(z => z.zone) : null;
   }
   
   // let firstPitchText = stripPercents(tendencies?.firstStrike || `Swings ${firstPitchSwingRate} on first pitch`);
