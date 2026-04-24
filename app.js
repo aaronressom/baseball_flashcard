@@ -10,12 +10,12 @@ const DEFAULT_SETTINGS = {
   hotZoneMinHardHits: 2,
   hotZoneHardHitThreshold: 40,
   // Pitch display settings
-  maxPitchesDisplayed: 10,
+  maxPitchesDisplayed: 4,
   showOnlyGoodPitches: false,
   showOnlyBadPitches: false,
   showAllZones: false,
   showPitcherHand: false,
-  pitchCircleSize: 32
+  pitchCircleSize: 38
 };
 let CURRENT_SETTINGS = { ...DEFAULT_SETTINGS };
 
@@ -130,17 +130,21 @@ function getFullyFilteredPitches(zones) {
 function createPitchZone(preFilteredZones, handedness) {
   const filteredZones = Array.isArray(preFilteredZones) ? preFilteredZones : [];
   const displayZones = filteredZones.slice(0, CURRENT_SETTINGS.maxPitchesDisplayed);
-  const pitchElements = displayZones.map(zone => {
+  const pitchElements = displayZones.map((zone, idx) => {
     const [x, y] = zone.position || [50, 50];
     const pitchType = zone.pitch || 'F';
     const isGood = zone.good === true;
     const colorClass = isGood ? 'pitch-circle--good' : 'pitch-circle--bad';
     const pitcherHand = zone.pitcherThrows || '';
     const handClass = pitcherHand === 'L' ? 'pitch-circle__hand--left' : 'pitch-circle__hand--right';
+    const isPriority = idx < 4;
+    const circleSize = isPriority
+      ? Math.round(CURRENT_SETTINGS.pitchCircleSize * 1.25) + 'px'
+      : CURRENT_SETTINGS.pitchCircleSize + 'px';
     return createElement('div', {
       className: `pitch-circle ${colorClass}`,
-      style: { left: `${x}%`, top: `${y}%` },
-      title: `${pitchType} (${pitcherHand}HP) — ${isGood ? 'Attack here' : 'Avoid this location'}`
+      style: { left: `${x}%`, top: `${y}%`, '--pitch-circle-size': circleSize },
+      title: `${pitchType} (${pitcherHand}HP) — ${isGood ? 'Good — Attack here' : 'Bad — Avoid here'}`
     },
       createElement('span', { className: 'pitch-circle__type' }, pitchType),
       CURRENT_SETTINGS.showPitcherHand ? createElement('span', { className: `pitch-circle__hand ${handClass}` }, pitcherHand) : null
@@ -662,13 +666,6 @@ try {
         return;
       }
 
-      // Snap progress to 100% before transitioning to teamSelect
-      const barFill = document.getElementById('loading-progress-fill');
-      if (barFill) {
-        barFill.style.transition = 'width 0.1s ease-out';
-        barFill.style.width = '100%';
-      }
-
       // --- CACHE WRITE ---
       cachedSeasonData = { teamsData: data.teamsData, metadata: data.metadata };
       cachedDateRange  = { start: startDate, end: endDate, maxVelocity: String(maxVelocity), pitchGroup };
@@ -773,11 +770,6 @@ try {
       el.textContent = '.'.repeat(dotCount);
     }, 500);
 
-    setTimeout(() => {
-      const barFill = document.getElementById('loading-progress-fill');
-      if (barFill) barFill.style.width = '90%';
-    }, 50);
-
     const params = this.loadingParams || {};
     const pillRow = [
       createElement('div', { className: 'filter-pill pill-pitch' }, params.pitchGroup || 'All Pitches'),
@@ -796,38 +788,7 @@ try {
 
     return createElement('div', { className: 'team-select-screen loading-screen' },
       createElement('h1', {}, 'Loading', dotsSpan),
-      createElement('div', { 
-        style: { cursor: 'pointer', marginBottom: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' },
-        onclick: () => {
-           const barWrapper = document.getElementById('loading-progress-wrapper');
-           if (barWrapper) {
-             if (barWrapper.style.maxHeight === '0px') {
-               barWrapper.style.maxHeight = '20px';
-               barWrapper.style.marginTop = '10px';
-             } else {
-               barWrapper.style.maxHeight = '0px';
-               barWrapper.style.marginTop = '0px';
-             }
-           }
-        }
-      },
-        createElement('p', { className: 'loading-subtitle', style: { margin: 0 } }, 'This may take a few minutes ⏷'),
-        createElement('div', { 
-          id: 'loading-progress-wrapper',
-          style: { 
-            width: '100%', maxWidth: '250px', height: '10px', maxHeight: '0px', overflow: 'hidden', 
-            background: '#e2e8f0', borderRadius: '99px', transition: 'all 0.3s ease', marginTop: '0px'
-          }
-        },
-          createElement('div', { 
-            id: 'loading-progress-fill',
-            style: { 
-              width: '0%', height: '100%', background: 'linear-gradient(90deg, #3b82f6, #10b981)', 
-              borderRadius: '99px', transition: 'width 180s cubic-bezier(0.1, 0.8, 0.3, 1)' 
-            }
-          })
-        )
-      ),
+      createElement('p', { className: 'loading-subtitle' }, 'This may take a few minutes'),
       createElement('div', { className: 'filter-pill-row' }, ...pillRow)
     );
   }
@@ -1335,8 +1296,8 @@ createElement('div', {},
               ...[
                 { label: 'Total Pitches',                   value: rawCount, bg: '#f1f5f9', border: '#cbd5e1', textColor: '#1e293b' },
                 { label: 'Matching Filters',                 value: displayedCount,    bg: '#eff6ff', border: '#93c5fd', textColor: '#1d4ed8', tooltip: 'Pitches currently shown on the grid (limited by Max Pitches Displayed).' },
-                { label: 'Attack Pitches (Strengths)',       value: displayedGoodCount, bg: '#f0fdf4', border: '#86efac', textColor: '#15803d' },
-                { label: 'Vulnerable Pitches (Weaknesses)',  value: displayedBadCount,  bg: '#fef2f2', border: '#fca5a5', textColor: '#b91c1c' },
+                { label: 'Good Pitches',  value: displayedGoodCount, bg: '#f0fdf4', border: '#86efac', textColor: '#15803d' },
+                { label: 'Bad Pitches',   value: displayedBadCount,  bg: '#fef2f2', border: '#fca5a5', textColor: '#b91c1c' },
               ].map(({ label, value, bg, border, textColor, tooltip }) =>
                 createElement('div', { className: 'stat-pill', ...(tooltip ? { 'data-tooltip': tooltip } : {}), style: { display: 'inline-flex', flexDirection: 'column', alignItems: 'center', background: bg, border: `1px solid ${border}`, borderRadius: '10px', padding: '6px 14px', minWidth: '80px', position: 'relative' } },
                   createElement('span', { style: { fontSize: '18px', fontWeight: '800', color: textColor, lineHeight: '1.1', textAlign: 'center', width: '100%' } }, value),
@@ -1348,7 +1309,7 @@ createElement('div', {},
               )
             ),
             createSlider('Max Pitches Displayed', 'maxPitchesDisplayed', 0, CURRENT_SETTINGS.showAllZones ? rawCount : filteredCount, 1),
-            createSlider('Pitch Circle Size (px)', 'pitchCircleSize', 32, 50, 1),
+            createSlider('Pitch Circle Size (px)', 'pitchCircleSize', 28, 56, 1),
             (() => {
               const _bypassLocked = cachedDateRange.pitchGroup && cachedDateRange.pitchGroup !== 'All';
               if (_bypassLocked && CURRENT_SETTINGS.showAllZones) CURRENT_SETTINGS.showAllZones = false;
@@ -1369,8 +1330,8 @@ createElement('div', {},
               );
             })(),
             createCheckbox('Show Pitcher Hand (L/R)', 'showPitcherHand'),
-            createCheckbox('Show Only Attack Pitches', 'showOnlyGoodPitches', 'toggle-green'),
-            createCheckbox('Show Only Vulnerable Pitches', 'showOnlyBadPitches', 'toggle-red')
+            createCheckbox('Show Only Good Pitches', 'showOnlyGoodPitches', 'toggle-green'),
+            createCheckbox('Show Only Bad Pitches', 'showOnlyBadPitches', 'toggle-red')
           ),
 
           // Zone Analysis — full width
@@ -1464,7 +1425,7 @@ createElement('div', {},
               createElement('div', { className: 'info-entry__content' },
                 createElement('div', { className: 'info-entry__title' }, 'Strike Zone'),
                 createElement('div', { className: 'info-entry__desc' },
-                  'Green circles = attack (whiffs, weak contact). Red circles = avoid (hard contact, balls in play). The batter icon shows their batting stance. The small L or R indicates if the pitch was thrown by a Left-Handed or Right-Handed pitcher.'
+                  'Green circles = good pitches (whiffs, weak contact). Red circles = bad pitches (hard contact, balls in play). The batter icon shows their batting stance. The small L or R indicates if the pitch was thrown by a Left-Handed or Right-Handed pitcher.'
                 ),
                 createElement('div', { className: 'pitch-badge-row' },
                   ...[

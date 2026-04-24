@@ -2048,4 +2048,22 @@ button:active {
   .pitch-zone-section, .pitch-zone-container {
     background-color: transparent !important;
   }
+
+  /* Fix: enforce 3:4 baseball rectangle and remove excess whitespace */
+  .pitch-zone {
+    width: clamp(300px, 32vw, 440px);
+    height: auto;
+    aspect-ratio: 3 / 4;
+  }
+
+  .pitch-zone-section {
+    justify-content: center;
+    padding: 20px 16px;
+    align-items: center;
+  }
+
+  .batter-graphic {
+    width: clamp(120px, 14vw, 200px);
+    align-self: stretch;
+  }
 }
