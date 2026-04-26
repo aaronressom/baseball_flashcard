@@ -3,7 +3,7 @@
 
 
 
-Deployed at: https://baseball-flashcard.vercel.app/
+Deployed at: https://slugger-baseball-flashcard.vercel.app/
 
 
 ---
