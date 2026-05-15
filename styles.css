@@ -1039,9 +1039,11 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
 
 .info-modal__header {
   padding: 24px 28px 18px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #bfdbfe;
   flex-shrink: 0;
   text-align: center;
+  background: #eff6ff;
+  border-radius: 16px 16px 0 0;
 }
 
 .info-modal__title {
@@ -1328,8 +1330,10 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
 
 .settings-modal__header {
   padding: 24px 32px 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #fed7aa;
   flex-shrink: 0;
+  background: #fff7ed;
+  border-radius: 16px 16px 0 0;
 }
 
 .settings-modal__title {
@@ -1621,9 +1625,10 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   padding-left: 16px;
   padding-right: 16px;
 }
-/* Center header title/subtitle in sidebar */
+/* Center header title/subtitle in sidebar, no rounded top corners needed */
 .settings-sidebar .settings-modal__header {
   text-align: center;
+  border-radius: 0;
 }
 
 /* ── Dockable Sidebar ─────────────────────────────────── */
