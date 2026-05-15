@@ -1068,15 +1068,11 @@ createElement('div', { style: { flex: 1 } },
                   createElement('button', {
                     type: 'button',
                     title: 'Open calendar',
-                    style: { padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '16px' },
-                    onclick: (e) => {
-                      const input = e.currentTarget.nextElementSibling;
-                      if (input && input.showPicker) input.showPicker();
-                    }
+                    style: { padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '16px', display: 'block' }
                   }, '📅'),
                   createElement('input', {
                     type: 'date',
-                    style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', pointerEvents: 'none' },
+                    style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 1 },
                     onchange: (e) => { document.getElementById('startDate').value = e.target.value; }
                   })
                 )
@@ -1095,15 +1091,11 @@ createElement('div', { style: { flex: 1 } },
                   createElement('button', {
                     type: 'button',
                     title: 'Open calendar',
-                    style: { padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '16px' },
-                    onclick: (e) => {
-                      const input = e.currentTarget.nextElementSibling;
-                      if (input && input.showPicker) input.showPicker();
-                    }
+                    style: { padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '16px', display: 'block' }
                   }, '📅'),
                   createElement('input', {
                     type: 'date',
-                    style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', pointerEvents: 'none' },
+                    style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 1 },
                     onchange: (e) => { document.getElementById('endDate').value = e.target.value; }
                   })
                 )
