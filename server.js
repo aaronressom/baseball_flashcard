@@ -456,6 +456,7 @@ function transformPitchDataToTeams(pitchData, existingData = {}, maxVelocity = 9
           sequence: sequence,
           shortSequence: shortSeq,
           outType: pitch.k_or_bb === 'Strikeout' ? 'K' : pitch.play_result,
+          wasSwinging: pitch.pitch_call === 'StrikeSwinging',
           pitchCount: currentPA.pitches.length
         });
       }
@@ -466,12 +467,26 @@ function transformPitchDataToTeams(pitchData, existingData = {}, maxVelocity = 9
       if (pitch.pitch_call === 'InPlay' && pitch.exit_speed) {
         batterData.atBats.push({
           launchAngle: pitch.angle || 0,
-          direction: pitch.direction || 0, 
-          distance: pitch.distance || 0, 
-          exitSpeed: pitch.exit_speed, 
+          direction: pitch.direction || 0,
+          distance: pitch.distance || 0,
+          exitSpeed: pitch.exit_speed,
           result: pitch.play_result
         });
       }
+    }
+
+    // Strikeouts in Trackman often have no play_result — capture them for outSequences separately
+    if (pitch.k_or_bb === 'Strikeout' && currentPA.pitches.length >= 2 &&
+        !(pitch.play_result && pitch.play_result !== 'Undefined')) {
+      const sequence = currentPA.pitches.slice(-3).map(p => p.type).join(' → ');
+      const shortSeq = currentPA.pitches.slice(-2).map(p => p.type).join(' → ');
+      batterData.outSequences.push({
+        sequence: sequence,
+        shortSequence: shortSeq,
+        outType: 'K',
+        wasSwinging: pitch.pitch_call === 'StrikeSwinging',
+        pitchCount: currentPA.pitches.length
+      });
     }
 
     
@@ -501,7 +516,7 @@ function transformPitchDataToTeams(pitchData, existingData = {}, maxVelocity = 9
     if (pitch.plate_loc_side !== null && pitch.plate_loc_height !== null) {
       const zone = getZoneFromLocation(pitch.plate_loc_side, pitch.plate_loc_height, batterData.handedness);
       if (!batterData.zoneAnalysis[zone]) {
-        batterData.zoneAnalysis[zone] = { pitches: 0, swings: 0, whiffs: 0, fouls: 0, weakContact: 0, hardHits: 0, contact: 0 };
+        batterData.zoneAnalysis[zone] = { pitches: 0, swings: 0, whiffs: 0, fouls: 0, weakContact: 0, hardHits: 0, contact: 0, takes: 0, contactOuts: 0, contactHits: 0 };
       }
 
       const zoneStats = batterData.zoneAnalysis[zone];
@@ -510,9 +525,14 @@ function transformPitchDataToTeams(pitchData, existingData = {}, maxVelocity = 9
       if (pitch.pitch_call === 'StrikeSwinging') zoneStats.whiffs++;
       if (['FoulBall', 'FoulBallFieldable', 'FoulBallNotFieldable'].includes(pitch.pitch_call)) zoneStats.fouls++;
       if (['FoulBall', 'FoulBallFieldable', 'FoulBallNotFieldable', 'InPlay'].includes(pitch.pitch_call)) zoneStats.contact++;
+      if (['BallCalled', 'StrikeCalled'].includes(pitch.pitch_call)) zoneStats.takes++;
       if (pitch.exit_speed && pitch.pitch_call === 'InPlay') {
         if (pitch.exit_speed >= 95) zoneStats.hardHits++;
         else if (pitch.exit_speed < 70) zoneStats.weakContact++;
+      }
+      if (pitch.pitch_call === 'InPlay' && pitch.play_result) {
+        if (['Out', 'FieldersChoice', 'Sacrifice'].includes(pitch.play_result)) zoneStats.contactOuts++;
+        else if (['Single', 'Double', 'Triple', 'HomeRun'].includes(pitch.play_result)) zoneStats.contactHits++;
       }
 
       const xPos = 50 + (pitch.plate_loc_side * 25);
@@ -575,7 +595,7 @@ function transformPitchDataToTeams(pitchData, existingData = {}, maxVelocity = 9
         // Analyze pitch sequences that get OUTS (not just strikeouts)
         function analyzeOutSequences(outSequences) {
           if (!outSequences || outSequences.length === 0) {
-            return 'Insufficient data';
+            return { text: 'Insufficient data', breakdown: null };
           }
 
           const total = outSequences.length;
@@ -594,23 +614,41 @@ function transformPitchDataToTeams(pitchData, existingData = {}, maxVelocity = 9
             .filter(([seq, count]) => count >= 2 || (count / total) >= 0.3)
             .sort((a, b) => b[1] - a[1]);
 
+          // Build breakdown for the top sequence's matching outs
+          function buildBreakdown(topSeq, matchingOuts) {
+            const bd = { kSwinging: 0, kLooking: 0, contactOut: 0 };
+            matchingOuts.forEach(out => {
+              if (out.outType === 'K') {
+                if (out.wasSwinging) bd.kSwinging++;
+                else bd.kLooking++;
+              } else {
+                bd.contactOut++;
+              }
+            });
+            return bd;
+          }
+
           if (significantSequences.length > 0) {
             const [topSeq, count] = significantSequences[0];
             const pct = Math.round(count / total * 100);
 
             // Show top sequence with percentage
-            let result = `${topSeq} (${count}/${total} = ${pct}%)`;
+            let text = `${topSeq} (${count}/${total} = ${pct}%)`;
 
             // If there's a strong second pattern, mention it too
             if (significantSequences.length > 1 && significantSequences[1][1] >= 2) {
               const [secondSeq, secondCount] = significantSequences[1];
               const secondPct = Math.round(secondCount / total * 100);
               if (secondPct >= 25) {
-                result += ` • Also: ${secondSeq} (${secondPct}%)`;
+                text += ` • Also: ${secondSeq} (${secondPct}%)`;
               }
             }
 
-            return result;
+            const matchingOuts = outSequences.filter(out => {
+              const seq = out.pitchCount >= 3 ? out.sequence : out.shortSequence;
+              return seq === topSeq;
+            });
+            return { text, breakdown: buildBreakdown(topSeq, matchingOuts) };
           }
 
           // Fallback: if no clear pattern, show most common individual pitch that gets outs
@@ -621,13 +659,20 @@ function transformPitchDataToTeams(pitchData, existingData = {}, maxVelocity = 9
           });
 
           const topPitch = Object.entries(finalPitches).sort((a, b) => b[1] - a[1])[0];
-          if (!topPitch) return 'Insufficient data';
-          return `${topPitch[0]} gets outs (${topPitch[1]}/${total})`;
+          if (!topPitch) return { text: 'Insufficient data', breakdown: null };
+
+          const matchingOuts = outSequences.filter(out => out.shortSequence.split(' → ').pop() === topPitch[0]);
+          return {
+            text: `${topPitch[0]} gets outs (${topPitch[1]}/${total})`,
+            breakdown: buildBreakdown(topPitch[0], matchingOuts)
+          };
         }
 
-        batter.powerSequence = batter.outSequences.length > 0
+        const outResult = batter.outSequences.length > 0
           ? analyzeOutSequences(batter.outSequences)
-          : 'Insufficient data';
+          : { text: 'Insufficient data', breakdown: null };
+        batter.powerSequence = outResult.text;
+        batter.powerSequenceBreakdown = outResult.breakdown;
       }
     });
   });

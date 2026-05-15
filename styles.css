@@ -355,19 +355,7 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   color: var(--muted);
 }
 
-.lineup-header .back-btn {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.lineup-header .print-btn {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-}
+/* Back/print buttons in lineup header use flex layout — no absolute positioning needed */
 
 /* Upgraded Back/Print Buttons */
 .back-btn {
@@ -408,13 +396,7 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   box-shadow: var(--shadow-md);
 }
 
-.lineup-header .back-btn:hover {
-  transform: translateY(calc(-50% - 2px));
-}
-
-.lineup-header .print-btn:hover {
-  transform: translateY(calc(-50% - 2px));
-}
+/* back-btn:hover applies the standard translateY(-2px) lift — no override needed here */
 
 /* ── Roster sort controls ── */
 .sort-container {
@@ -564,6 +546,17 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   font-size: 13px;
   font-weight: 600;
   color: var(--muted);
+}
+
+.low-data-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 10px;
+  padding: 2px 8px;
+  letter-spacing: 0.03em;
 }
 
 /* --- Flashcard Widget --- */
@@ -917,6 +910,107 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   text-align: center;
 }
 
+/* ── Zone hover tooltip ──────────────────────────────── */
+.zone-hover-tooltip {
+  position: absolute;
+  z-index: 9999;
+  background: #1e293b;
+  color: #f1f5f9;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+  min-width: 180px;
+}
+
+.zone-tooltip-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #334155;
+  padding-bottom: 5px;
+}
+
+.zone-tooltip-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: #7dd3fc;
+}
+
+.zone-tooltip-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.zone-tooltip-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 99px;
+  line-height: 1.4;
+}
+
+.zone-tooltip-pill--good {
+  background: #16a34a;
+  color: #fff;
+}
+
+.zone-tooltip-pill--bad {
+  background: #dc2626;
+  color: #fff;
+}
+
+.zone-tooltip-pill--hand {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.zone-tooltip-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.zone-tooltip-table td {
+  padding: 1px 4px;
+}
+
+.zone-tooltip-table td:first-child {
+  color: #94a3b8;
+}
+
+.zone-tooltip-table td:last-child {
+  text-align: right;
+  font-weight: 600;
+}
+
+/* ── Out Pitch outcome breakdown row ─────────────────── */
+.out-breakdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.out-breakdown-item {
+  padding: 2px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.out-breakdown-k-s { background: #fee2e2; color: #b91c1c; }
+.out-breakdown-k-l { background: #fef3c7; color: #92400e; }
+.out-breakdown-contact { background: #e0f2fe; color: #0369a1; }
+.out-breakdown-sep { color: #cbd5e1; font-size: 14px; }
+
+.print-widget .out-breakdown { font-size: 11px; }
+
 /* Overlays & Modals */
 .info-overlay, .settings-overlay {
   position: fixed;
@@ -1016,6 +1110,17 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
   border-bottom: none;
 }
 
+@keyframes info-highlight-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(59,130,246,0.6); background: rgba(219,234,254,0.5); }
+  50%  { box-shadow: 0 0 0 6px rgba(59,130,246,0); background: rgba(219,234,254,0.15); }
+  100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); background: transparent; }
+}
+
+.info-entry--highlight {
+  border-radius: 8px;
+  animation: info-highlight-pulse 2s ease-out forwards;
+}
+
 .info-entry__icon {
   width: 34px;
   height: 34px;
@@ -1049,6 +1154,140 @@ input[type="range"]#maxVelocity::-moz-range-thumb:hover {
 .info-threat-row {
   display: block;
   margin-bottom: 2px;
+}
+
+/* ── Info modal read-more expand ────────────────────────── */
+.info-entry__expanded {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.info-entry__expanded p {
+  margin: 0 0 6px 0;
+}
+
+.info-entry__expanded p:last-child {
+  margin-bottom: 0;
+}
+
+.info-read-more-btn {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.info-read-more-btn:hover {
+  color: #1e40af;
+}
+
+/* ── Read More / Expandable sections ─────────────────── */
+.read-more-area {
+  margin-top: 6px;
+}
+
+.read-more-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 0;
+  letter-spacing: 0.02em;
+}
+
+.read-more-btn:hover {
+  text-decoration: underline;
+}
+
+.read-more-expanded {
+  background: #f8fafc;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.55;
+}
+
+.read-more-expanded ul {
+  margin: 6px 0 0 0;
+  padding-left: 16px;
+}
+
+.read-more-expanded li {
+  margin-bottom: 4px;
+}
+
+/* ── Section info button (ℹ) ─────────────────────────── */
+.section-info-btn {
+  background: none;
+  border: 1.5px solid #94a3b8;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.section-info-btn:hover {
+  background: #e2e8f0;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ── Confidence info expansion ───────────────────────── */
+.confidence-info-expand {
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.55;
+}
+
+.confidence-info-expand p {
+  margin: 0 0 6px 0;
+}
+
+.confidence-info-expand ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.confidence-info-expand li {
+  margin-bottom: 5px;
+}
+
+/* Hide read-more buttons in print */
+.print-widget .read-more-btn,
+.print-widget .read-more-area,
+.print-widget .section-info-btn,
+.print-widget .confidence-info-expand {
+  display: none !important;
 }
 
 /* ── Pitch type badge pills ───────────────────────────── */
@@ -1589,23 +1828,44 @@ button:active {
   padding: 16px 0; 
 }
 
-/* getting rid of graphic on print */
-.print-widget .batter-graphic { 
-  display: none !important; 
+/* C1: Restore batter graphic in print — show at a small fixed width */
+.print-widget .batter-graphic {
+  display: flex !important;
+  width: 80px !important;
+  height: auto !important;
+  flex-shrink: 0 !important;
+  align-self: center !important;
 }
 
 .print-widget .batter-graphic img {
-  width: auto;
-  height: 100%;
+  width: 100%;
+  height: auto;
   object-fit: contain;
 }
 
-/* 3. Grid: large and dominant — full width, centered */
+/* C3: Pitch zone — larger and dominant */
 .print-widget .pitch-zone {
-  width: 580px !important;
-  height: 580px !important;
+  width: 500px !important;
+  height: 500px !important;
   flex-shrink: 0 !important;
   margin: 0 auto !important;
+}
+
+/* C3: Pitch zone section — row layout so batter graphic + zone are side by side */
+.print-widget .pitch-zone-section {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+/* C3: pitch-zone-container (wraps batter + zone) should be a row */
+.print-widget .pitch-zone-container {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
 }
 
 @media print {
@@ -1707,46 +1967,100 @@ button:active {
     opacity: 1 !important;
   }
 
-/* FIX ASPECT RATIO: Tall Rectangle (3:4) to match mobile, keeps height safe for 1-page */
+/* C3: Pitch zone size in print — bigger, uses percentage approach */
   .print-widget .pitch-zone {
-    width: 270px !important; /* Narrowed the width to create the tall rectangle */
-    height: 360px !important; /* Kept height identical so bottom text doesn't shift */
-    margin: 0 auto 5px auto !important;
+    width: 46% !important;
+    max-width: 380pt !important;
+    aspect-ratio: 3 / 4 !important;
+    height: auto !important;
+    margin: 0 !important;
     flex-shrink: 0 !important;
-    border: 2px solid #888888 !important; 
+    border: 2px solid #888888 !important;
   }
 
-  /* COMPACT 3-COLUMN INFO LAYOUT */
+  /* C1: Batter graphic in print */
+  .print-widget .batter-graphic {
+    display: flex !important;
+    width: 12% !important;
+    max-width: 80pt !important;
+    height: auto !important;
+    flex-shrink: 0 !important;
+    align-self: center !important;
+  }
+
+  /* C2: Hide Weakness Confidence tier buttons */
+  .print-widget .confidence-widget { display: none !important; }
+
+  /* C5: Much larger info section text — readable under pressure */
   .print-widget .info-section {
     display: grid !important;
-    grid-template-columns: 1fr 1fr 1fr !important; 
-    gap: 6px !important;
-    padding: 6px !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8pt !important;
+    padding: 8pt !important;
     margin: 0 !important;
     border: none !important;
-    border-top: 2px solid #000 !important;
+    border-top: 2pt solid #000 !important;
     background: #ffffff !important;
   }
 
   .print-widget .info-section * {
-    font-size: 11px !important;
-    line-height: 1.2 !important;
+    font-size: 16px !important;
+    line-height: 1.35 !important;
     color: #000000 !important;
   }
 
+  /* C4+C5: Bigger headings */
   .print-widget .info-section h3,
   .print-widget .info-section h4 {
-    font-size: 13px !important;
+    font-size: 18px !important;
     font-weight: 900 !important;
     text-transform: uppercase !important;
-    margin-bottom: 3px !important;
-    border-bottom: 1px solid #ccc !important;
+    margin-bottom: 4px !important;
+    border-bottom: 1.5px solid #ccc !important;
+    padding-bottom: 2px !important;
   }
 
   .print-widget .info-section > div {
-    padding: 4px !important;
+    padding: 6pt !important;
     margin: 0 !important;
-    border: 1px solid #eee !important;
+    border: 1px solid #ddd !important;
+    border-radius: 4px !important;
+  }
+
+  /* C4: Threats & Tendencies bigger, full row */
+  .print-widget .threat-box {
+    grid-column: 1 / -1 !important;
+  }
+
+  .print-widget .threat-item {
+    font-size: 17px !important;
+    padding: 3px 0 !important;
+  }
+
+  .print-widget .threat-label {
+    font-weight: 900 !important;
+    font-size: 17px !important;
+  }
+
+  .print-widget .threat-value {
+    font-size: 17px !important;
+  }
+
+  /* C5: Power sequence text */
+  .print-widget .power-sequence-text {
+    font-size: 17px !important;
+    font-weight: 700 !important;
+  }
+
+  /* C6: Widget uses full page width, not fixed px */
+  .print-widget {
+    width: 100% !important;
+    max-width: 7.9in !important;
+  }
+
+  .print-page {
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
   /* Hide UI Buttons */

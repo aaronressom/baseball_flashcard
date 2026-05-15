@@ -19,6 +19,32 @@ const DEFAULT_SETTINGS = {
 };
 let CURRENT_SETTINGS = { ...DEFAULT_SETTINGS };
 
+// Tracks which expandable info sections are open
+const EXPANDED_SECTIONS = {
+  confidenceInfo: false,
+  firstPitch: false,
+  outPitch: false,
+  threats: false,
+  vulnerableZones: false,
+  hotZones: false,
+};
+
+// When set, the info modal will scroll-highlight this entry after opening
+let INFO_MODAL_TARGET = null;
+
+function openInfoModal(sectionId) {
+  if (!app) return;
+  app.showInfoPanel = true;
+  app.render();
+  requestAnimationFrame(() => {
+    const el = document.getElementById('info-entry-' + sectionId);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('info-entry--highlight');
+    setTimeout(() => el.classList.remove('info-entry--highlight'), 2000);
+  });
+}
+
 // Known ALPB season boundaries
 const SEASON_2025 = { start: '2025-04-25', end: '2025-09-18' };
 const SEASON_2026 = { start: '2026-04-21', end: '2026-09-13' };
@@ -122,9 +148,51 @@ function getFullyFilteredPitches(zones) {
   }
   return fz;
 }
-function createPitchZone(preFilteredZones, handedness) {
+function createPitchZone(preFilteredZones, handedness, zoneAnalysis) {
   const filteredZones = Array.isArray(preFilteredZones) ? preFilteredZones : [];
   const displayZones = filteredZones.slice(0, CURRENT_SETTINGS.maxPitchesDisplayed);
+
+  function showZoneTooltip(circleEl, zoneName, isGood, pitcherHand) {
+    const stats = zoneAnalysis && zoneAnalysis[zoneName];
+    if (!stats) return;
+    const existing = document.getElementById('zone-hover-tooltip');
+    if (existing) existing.remove();
+    const tip = document.createElement('div');
+    tip.id = 'zone-hover-tooltip';
+    tip.className = 'zone-hover-tooltip';
+    const goodPill = isGood
+      ? `<span class="zone-tooltip-pill zone-tooltip-pill--good">Good · Attack here</span>`
+      : `<span class="zone-tooltip-pill zone-tooltip-pill--bad">Bad · Avoid here</span>`;
+    const handPill = pitcherHand
+      ? `<span class="zone-tooltip-pill zone-tooltip-pill--hand">${pitcherHand}HP</span>`
+      : '';
+    tip.innerHTML = `
+      <div class="zone-tooltip-header">
+        <span class="zone-tooltip-title">${zoneName}</span>
+        <span class="zone-tooltip-pills">${goodPill}${handPill}</span>
+      </div>
+      <table class="zone-tooltip-table">
+        <tr><td>Total</td><td>${stats.pitches}</td></tr>
+        <tr><td>Whiff (K↩)</td><td>${stats.whiffs}</td></tr>
+        <tr><td>Take</td><td>${stats.takes}</td></tr>
+        <tr><td>Contact out</td><td>${stats.contactOuts}</td></tr>
+        <tr><td>Contact hit</td><td>${stats.contactHits}</td></tr>
+        <tr><td>Foul</td><td>${stats.fouls}</td></tr>
+      </table>`;
+    document.body.appendChild(tip);
+    const rect = circleEl.getBoundingClientRect();
+    const tipW = 180;
+    let left = rect.right + 8;
+    if (left + tipW > window.innerWidth) left = rect.left - tipW - 8;
+    tip.style.left = `${left + window.scrollX}px`;
+    tip.style.top = `${rect.top + window.scrollY}px`;
+  }
+
+  function hideZoneTooltip() {
+    const tip = document.getElementById('zone-hover-tooltip');
+    if (tip) tip.remove();
+  }
+
   const pitchElements = displayZones.map((zone, idx) => {
     const [x, y] = zone.position || [50, 50];
     const pitchType = zone.pitch || 'F';
@@ -136,14 +204,16 @@ function createPitchZone(preFilteredZones, handedness) {
     const circleSize = isPriority
       ? Math.round(CURRENT_SETTINGS.pitchCircleSize * 1.25) + 'px'
       : CURRENT_SETTINGS.pitchCircleSize + 'px';
-    return createElement('div', {
+    const el = createElement('div', {
       className: `pitch-circle ${colorClass}`,
       style: { left: `${x}%`, top: `${y}%`, '--pitch-circle-size': circleSize },
-      title: `${pitchType} (${pitcherHand}HP) — ${isGood ? 'Good — Attack here' : 'Bad — Avoid here'}`
+      onmouseenter: (e) => showZoneTooltip(e.currentTarget, zone.zone, isGood, pitcherHand),
+      onmouseleave: () => hideZoneTooltip()
     },
       createElement('span', { className: 'pitch-circle__type' }, pitchType),
       CURRENT_SETTINGS.showPitcherHand ? createElement('span', { className: `pitch-circle__hand ${handClass}` }, pitcherHand) : null
     );
+    return el;
   });
   const isLeftHanded = handedness === 'LHB';
   const batterClass = isLeftHanded ? 'batter-graphic-left-handed' : 'batter-graphic-right-handed';
@@ -187,16 +257,38 @@ function createBatterGraphic(handedness, batterName, renderedCount, availableCou
   );
 }
 
-/**
- * Builds the scouting tendencies panel showing spray chart, zone analysis, and power sequence.
- * Strips raw percentage strings from display text for cleaner presentation.
- * @param {Object} tendencies - Batter tendency strings (pull%, oppo%, groundball%, etc.).
- * @param {Object} stats - Aggregate stat counters (K%, BB%, xBA, etc.).
- * @param {Object} zoneAnalysis - Per-zone pitch outcome breakdown.
- * @param {string} powerSequence - Narrative text describing the top pitch sequence vs. this batter.
- * @returns {HTMLElement}
- */
-function createTendencies(tendencies, stats, zoneAnalysis, powerSequence) {
+// Creates an inline "Read more / Show less" toggle using direct DOM manipulation (no re-render)
+function makeInfoExpand(...contentItems) {
+  const expandDiv = createElement('div', { className: 'info-entry__expanded' }, ...contentItems);
+  expandDiv.style.display = 'none';
+  let btn;
+  btn = createElement('button', {
+    className: 'info-read-more-btn',
+    onclick: () => {
+      const open = expandDiv.style.display !== 'none';
+      expandDiv.style.display = open ? 'none' : 'block';
+      btn.textContent = open ? 'Read more ▼' : 'Show less ▲';
+    }
+  }, 'Read more ▼');
+  return [expandDiv, btn];
+}
+
+function makeReadMore(sectionKey, expandedContent, appRef) {
+  const isOpen = EXPANDED_SECTIONS[sectionKey];
+  return createElement('div', { className: 'read-more-area' },
+    isOpen ? createElement('div', { className: 'read-more-expanded' }, expandedContent) : null,
+    createElement('button', {
+      className: 'read-more-btn',
+      onclick: (e) => {
+        e.stopPropagation();
+        EXPANDED_SECTIONS[sectionKey] = !isOpen;
+        if (appRef) appRef.render();
+      }
+    }, isOpen ? 'Show less ▲' : 'Read more ▼')
+  );
+}
+
+function createTendencies(tendencies, stats, zoneAnalysis, powerSequence, powerSequenceBreakdown) {
 const stripPercents = (text) => {
     if (typeof text !== 'string') return text;
     return text
@@ -315,13 +407,18 @@ const activeLevel = CONFIDENCE_LEVELS.find(l => l.threshold === vulnThreshold) |
   const activeColor = activeLevel.color;
 
 const confidenceSlider = app ? createElement('div', { style: { padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '16px', boxShadow: 'var(--shadow-sm)' } },
-    createElement('div', { style: { marginBottom: '10px', textAlign: 'center' } },
+    createElement('div', { style: { marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' } },
       createElement('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '7px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '5px 14px' } },
         createElement('span', { style: { width: '12px', height: '12px', borderRadius: '50%', border: `2.5px solid ${activeColor}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' } },
           createElement('span', { style: { width: '3px', height: '3px', borderRadius: '50%', background: activeColor, display: 'block' } })
         ),
         createElement('span', { style: { fontSize: '11px', fontWeight: '700', color: '#475569', letterSpacing: '0.09em', textTransform: 'uppercase' } }, 'Weakness Confidence')
-      )
+      ),
+      createElement('button', {
+        className: 'section-info-btn',
+        title: 'What is Weakness Confidence?',
+        onclick: (e) => { e.stopPropagation(); openInfoModal('weakness-confidence'); }
+      }, 'ℹ')
     ),
     createElement('div', { style: { display: 'flex', gap: '8px' } },
       ...CONFIDENCE_LEVELS.map(level => {
@@ -376,49 +473,75 @@ const confidenceSlider = app ? createElement('div', { style: { padding: '16px', 
 */
   // ------- CONFIDENCE SLIDER END -------
 
-  const confidenceWidget = CURRENT_SETTINGS.showAllZones
-    ? createElement('div', {
-        style: { position: 'relative', borderRadius: '12px', cursor: 'not-allowed' },
-        title: 'Weakness Confidence is disabled when the "Bypass Filter ⚠️" is ON'
-      },
-        createElement('div', { style: { opacity: '0.3', pointerEvents: 'none', filter: 'grayscale(1)' }, title: 'Weakness Confidence is disabled when the "Bypass Filter ⚠️" is ON' }, confidenceSlider),
-        createElement('span', { style: { position: 'absolute', top: '-6px', right: '-6px', fontSize: '14px', lineHeight: '1' }, title: 'Weakness Confidence is disabled when the "Bypass Filter ⚠️" is ON' }, '🔒')
-      )
-    : confidenceSlider;
+  const confidenceWidget = createElement('div', { className: 'confidence-widget' },
+    CURRENT_SETTINGS.showAllZones
+      ? createElement('div', {
+          style: { position: 'relative', borderRadius: '12px', cursor: 'not-allowed' },
+          title: 'Weakness Confidence is disabled when the "Bypass Filter ⚠️" is ON'
+        },
+          createElement('div', { style: { opacity: '0.3', pointerEvents: 'none', filter: 'grayscale(1)' }, title: 'Weakness Confidence is disabled when the "Bypass Filter ⚠️" is ON' }, confidenceSlider),
+          createElement('span', { style: { position: 'absolute', top: '-6px', right: '-6px', fontSize: '14px', lineHeight: '1' }, title: 'Weakness Confidence is disabled when the "Bypass Filter ⚠️" is ON' }, '🔒')
+        )
+      : confidenceSlider
+  );
   return createElement('div', { className: 'info-section' },
     confidenceWidget,
     createElement('div', { className: 'power-sequence stats-box' },
-      createElement('h4', {}, 'First-Pitch Approach'),
-      createElement('div', { className: 'power-sequence-text' }, firstPitchText)
+      createElement('h4', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' } },
+        'First-Pitch Approach',
+        createElement('button', { className: 'section-info-btn', onclick: (e) => { e.stopPropagation(); openInfoModal('first-pitch'); } }, 'ℹ')
+      ),
+      createElement('div', { className: 'power-sequence-text' }, firstPitchText),
     ),
     cappedVulnerableZones.length > 0 ? createElement('div', { className: 'power-sequence vulnerable-zone' },
-    createElement('h4', {}, 'Vulnerable Zones'),
-    createElement('div', { className: 'power-sequence-text' },
-    cappedVulnerableZones.slice(0, 2).map(z => `${z.zone} (${z.score})`).join(', '))
-) : null,
-    hotZones.length > 0 ? createElement('div', { className: 'power-sequence hot-zone' },
-      createElement('h4', {}, 'Hot Zones (Avoid)'),
+      createElement('h4', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' } },
+        'Vulnerable Zones',
+        createElement('button', { className: 'section-info-btn', onclick: (e) => { e.stopPropagation(); openInfoModal('vulnerable'); } }, 'ℹ')
+      ),
       createElement('div', { className: 'power-sequence-text' },
-        hotZones.slice(0, 2).map(z => z.zone).join(', ') || 'None identified')
+        cappedVulnerableZones.slice(0, 2).map(z => `${z.zone} (${z.score})`).join(', ')),
+    ) : null,
+    hotZones.length > 0 ? createElement('div', { className: 'power-sequence hot-zone' },
+      createElement('h4', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' } },
+        'Hot Zones (Avoid)',
+        createElement('button', { className: 'section-info-btn', onclick: (e) => { e.stopPropagation(); openInfoModal('hot'); } }, 'ℹ')
+      ),
+      createElement('div', { className: 'power-sequence-text' },
+        hotZones.slice(0, 2).map(z => z.zone).join(', ') || 'None identified'),
     ) : null,
     createElement('div', { className: 'power-sequence out-sequence' },
-      createElement('h4', {}, 'Out Sequence'),
-      createElement('div', { className: 'power-sequence-text' }, cleanedPowerSequence)
+      createElement('h4', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' } },
+        'Out Pitch / Sequence',
+        createElement('button', { className: 'section-info-btn', onclick: (e) => { e.stopPropagation(); openInfoModal('out-pitch'); } }, 'ℹ')
+      ),
+      createElement('div', { className: 'power-sequence-text' }, cleanedPowerSequence),
+      powerSequenceBreakdown && (powerSequenceBreakdown.kSwinging + powerSequenceBreakdown.kLooking + powerSequenceBreakdown.contactOut) > 0
+        ? createElement('div', { className: 'out-breakdown' },
+            createElement('span', { className: 'out-breakdown-item out-breakdown-k-s', title: 'Strikeout swinging (swing-and-miss)' }, `K↩ ${powerSequenceBreakdown.kSwinging}`),
+            createElement('span', { className: 'out-breakdown-sep' }, '|'),
+            createElement('span', { className: 'out-breakdown-item out-breakdown-k-l', title: 'Strikeout looking (called strike 3)' }, `K👁 ${powerSequenceBreakdown.kLooking}`),
+            createElement('span', { className: 'out-breakdown-sep' }, '|'),
+            createElement('span', { className: 'out-breakdown-item out-breakdown-contact', title: 'Contact out (ball in play)' }, `Contact ${powerSequenceBreakdown.contactOut}`)
+          )
+        : null,
     ),
     createElement('div', { className: 'power-sequence threat-box' },
-      createElement('h4', {}, 'Threats & Tendencies'),
+      createElement('h4', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' } },
+        'Threats & Tendencies',
+        createElement('button', { className: 'section-info-btn', onclick: (e) => { e.stopPropagation(); openInfoModal('threats'); } }, 'ℹ')
+      ),
       createElement('div', { className: 'threat-item' },
         createElement('span', { className: 'threat-label' }, 'Steal:'),
-        createElement('span', { className: 'threat-value' }, tendencies?.stealThreat || 'Low')
+        createElement('span', { className: 'threat-value' }, tendencies?.stealThreat || 'Low (no attempts)')
       ),
       createElement('div', { className: 'threat-item' },
         createElement('span', { className: 'threat-label' }, 'Bunt:'),
-        createElement('span', { className: 'threat-value' }, tendencies?.buntThreat || 'Low')
+        createElement('span', { className: 'threat-value' }, tendencies?.buntThreat || 'Low (no bunts)')
       ),
       createElement('div', { className: 'threat-item' },
         createElement('span', { className: 'threat-label' }, 'Spray:'),
         createElement('span', { className: 'threat-value' }, sprayText)
-      )
+      ),
     )
   );
 }
@@ -462,14 +585,16 @@ buildPrintPage(batter, teamName, orderIndex) {
     if (typeof orderIndex === 'number') metaBits.push(`#${orderIndex + 1}`);
     if (batter.handedness) metaBits.push(batter.handedness);
     metaBits.push(`${batter.stats?.totalPitches || 0} pitches`);
+    const isLowData = (batter.stats?.totalPitches || 0) < 50;
     const header = createElement('div', { className: 'header' },
       createElement('div', { className: 'header__title' },
         createElement('span', { className: 'name' }, batter.batter || 'Unknown'),
-        metaBits.length ? createElement('span', { className: 'meta' }, metaBits.join(' • ')) : null
+        metaBits.length ? createElement('span', { className: 'meta' }, metaBits.join(' • ')) : null,
+        isLowData ? createElement('span', { className: 'low-data-badge', title: 'Limited Trackman data' }, '⚠ Low Data') : null
       )
     );
     
-    const { el: pitchZoneInnerPrint } = createPitchZone(getFullyFilteredPitches(batter.pitchZones || []), batter.handedness);
+    const { el: pitchZoneInnerPrint } = createPitchZone(getFullyFilteredPitches(batter.pitchZones || []), batter.handedness, null);
     
     // THE iOS PRINT HACK: BUILD A PURE HTML GRID RIGHT BEFORE PRINTING
     const zoneEl = pitchZoneInnerPrint.querySelector('.pitch-zone');
@@ -493,7 +618,7 @@ buildPrintPage(batter, teamName, orderIndex) {
     }
 
     const pitchSection = createElement('div', { className: 'pitch-zone-section' }, pitchZoneInnerPrint);
-    const infoSection = createTendencies(batter.tendencies, batter.stats, batter.zoneAnalysis, batter.powerSequence, null);
+    const infoSection = createTendencies(batter.tendencies, batter.stats, batter.zoneAnalysis, batter.powerSequence, batter.powerSequenceBreakdown);
     const widget = createElement('div', { className: 'widget print-widget' },
       header,
       pitchSection,
@@ -581,7 +706,7 @@ printCurrentCard() {
     if (!lineup) return;
     const data = lineup[this.selectedBatterIndex];
     if (!data) return;
-    const { el } = createPitchZone(getFullyFilteredPitches(data.pitchZones || []), data.handedness);
+    const { el } = createPitchZone(getFullyFilteredPitches(data.pitchZones || []), data.handedness, data.zoneAnalysis);
     pzSection.innerHTML = '';
     pzSection.appendChild(el);
   }
@@ -1193,12 +1318,11 @@ createElement('div', {},
     );
   }
   renderSettingsPanel(rawCount = 0, filteredCount = 0, goodCount = 0, badCount = 0, displayedCount = 0, displayedGoodCount = 0, displayedBadCount = 0, statsTotalPitches = 0, docked = false) {
-    // Clamp down to sliderMax if the batter has fewer pitches than current setting
     const sliderMax = CURRENT_SETTINGS.showAllZones ? rawCount : filteredCount;
-    if (CURRENT_SETTINGS.maxPitchesDisplayed > sliderMax) {
-      CURRENT_SETTINGS.maxPitchesDisplayed = sliderMax;
-    }
-    const createSlider = (label, key, min, max, step = 1) => {
+    // Compute effective display value without mutating the setting — slice(0, N) handles the real cap naturally
+    const effectiveMaxPitches = Math.min(CURRENT_SETTINGS.maxPitchesDisplayed, sliderMax);
+    const createSlider = (label, key, min, max, step = 1, displayValue = undefined) => {
+      const sliderValue = displayValue !== undefined ? displayValue : CURRENT_SETTINGS[key];
       return createElement('div', { className: 'setting-item' },
         createElement('label', { className: 'setting-label' }, label),
         createElement('div', { className: 'setting-input-group' },
@@ -1207,7 +1331,7 @@ createElement('div', {},
             min: min,
             max: max,
             step: step,
-            value: CURRENT_SETTINGS[key],
+            value: sliderValue,
             className: 'setting-slider',
             oninput: (e) => {
               const value = parseFloat(e.target.value);
@@ -1224,7 +1348,7 @@ createElement('div', {},
             min: min,
             max: max,
             step: step,
-            value: CURRENT_SETTINGS[key],
+            value: sliderValue,
             className: 'setting-number-input',
             oninput: (e) => {
               const value = parseFloat(e.target.value);
@@ -1298,7 +1422,7 @@ createElement('div', {},
                 )
               )
             ),
-            createSlider('Max Pitches Displayed', 'maxPitchesDisplayed', 0, CURRENT_SETTINGS.showAllZones ? rawCount : filteredCount, 1),
+            createSlider('Max Pitches Displayed', 'maxPitchesDisplayed', 0, sliderMax, 1, effectiveMaxPitches),
             createSlider('Pitch Circle Size (px)', 'pitchCircleSize', 28, 56, 1),
             (() => {
               const _bypassLocked = cachedDateRange.pitchGroup && cachedDateRange.pitchGroup !== 'All';
@@ -1370,6 +1494,10 @@ createElement('div', {},
           createElement('span', { className: 'name' }, data.batter || 'Unknown'),
           createElement('span', { className: `mini-card-hand ${data.handedness}` }, data.handedness || ''),
           createElement('span', { className: 'meta' }, `• ${data.stats?.totalPitches || 0} pitches`),
+          (data.stats?.totalPitches || 0) < 50 ? createElement('span', {
+            className: 'low-data-badge',
+            title: 'Limited Trackman data — scouting conclusions may be less reliable'
+          }, '⚠ Low Data') : null,
           createElement('button', {
             className: 'info-btn',
             onclick: () => this.toggleInfo()
@@ -1417,6 +1545,11 @@ createElement('div', {},
                 createElement('div', { className: 'info-entry__desc' },
                   'Green circles = good pitches (whiffs, weak contact). Red circles = bad pitches (hard contact, balls in play). The batter icon shows their batting stance. The small L or R indicates if the pitch was thrown by a Left-Handed or Right-Handed pitcher.'
                 ),
+                ...makeInfoExpand(
+                  createElement('p', {}, createElement('strong', {}, 'Green:'), ' Pitcher won — whiff, called strike, weak contact (< 70 mph exit velo), or foul ball.'),
+                  createElement('p', {}, createElement('strong', {}, 'Red:'), ' Batter won — hard contact (95+ mph) or ball put in play for a hit/out that favored the hitter.'),
+                  createElement('p', {}, 'Larger circles = more recently thrown pitches in the session. Hover any circle to see full zone stats: total pitches, whiffs, takes, contact outs, contact hits, and fouls.')
+                ),
                 createElement('div', { className: 'pitch-badge-row' },
                   ...[
                     { abbr: '4S', name: 'Four-Seam' },
@@ -1437,40 +1570,59 @@ createElement('div', {},
             ),
 
             // Vulnerable Zones
-            createElement('div', { className: 'info-entry' },
+            createElement('div', { className: 'info-entry', id: 'info-entry-vulnerable' },
               createElement('div', { className: 'info-entry__icon', style: { background: '#fef9c3' } }, '⚡'),
               createElement('div', { className: 'info-entry__content' },
                 createElement('div', { className: 'info-entry__title' }, 'Vulnerable Zones'),
                 createElement('div', { className: 'info-entry__desc' },
                   'Locations where the batter struggles most — high whiff rate, weak contact, or excessive fouls. Attack here.'
+                ),
+                ...makeInfoExpand(
+                  createElement('p', {}, 'Each zone gets a vulnerability score from 0 (most vulnerable) to 60 (least) based on whiff rate, weak contact rate, and foul rate.'),
+                  createElement('p', {}, 'The ', createElement('strong', {}, 'Weakness Confidence'), ' setting controls which zones appear: Broad (≤ 60, min 3 swings), Balanced (≤ 35, min 7), Strict (≤ 20, min 10).'),
+                  createElement('p', {}, 'When attacking here, stay in the zone — even borderline pitches will produce poor contact.')
                 )
               )
             ),
 
             // Hot Zones
-            createElement('div', { className: 'info-entry' },
+            createElement('div', { className: 'info-entry', id: 'info-entry-hot' },
               createElement('div', { className: 'info-entry__icon', style: { background: '#fee2e2' } }, '🔥'),
               createElement('div', { className: 'info-entry__content' },
                 createElement('div', { className: 'info-entry__title' }, 'Hot Zones (Avoid)'),
                 createElement('div', { className: 'info-entry__desc' },
                   'Where the batter makes hard contact (95+ mph exit velocity). Pitching here is dangerous — stay out.'
+                ),
+                ...makeInfoExpand(
+                  createElement('p', {}, 'A zone qualifies as a Hot Zone when: hard-hit rate exceeds ', createElement('strong', {}, '40%'), ' AND at least ', createElement('strong', {}, '2 hard hits'), ' (95+ mph) have been recorded there.'),
+                  createElement('p', {}, 'These thresholds are adjustable in Analysis Settings → Zone Analysis. Use Hot Zones as a map of where ', createElement('em', {}, 'not'), ' to miss — especially when ahead in the count.')
                 )
               )
             ),
 
             // Out Sequence
-            createElement('div', { className: 'info-entry' },
+            createElement('div', { className: 'info-entry', id: 'info-entry-out-pitch' },
               createElement('div', { className: 'info-entry__icon', style: { background: '#ede9fe' } }, '📋'),
               createElement('div', { className: 'info-entry__content' },
-                createElement('div', { className: 'info-entry__title' }, 'Out Sequence'),
+                createElement('div', { className: 'info-entry__title' }, 'Out Pitch / Sequence'),
                 createElement('div', { className: 'info-entry__desc' },
                   'The most common pitch sequences that historically get this batter out — groundouts, flyouts, strikeouts. Use this as your blueprint.'
+                ),
+                ...makeInfoExpand(
+                  createElement('p', {}, 'Analyzes the last 2–3 pitches of every plate appearance that ended in an out. The most frequent pitch or sequence wins.'),
+                  createElement('p', {}, 'A single pitch (e.g. "SL") is the out pitch itself. An arrow sequence (e.g. "4S → SL") shows the setup pitch followed by the out pitch.'),
+                  createElement('p', {},
+                    createElement('strong', {}, 'K↩'), ' = strikeout swinging (swing and miss). ',
+                    createElement('strong', {}, 'K👁'), ' = strikeout looking (called strike 3). ',
+                    createElement('strong', {}, 'Contact'), ' = ball put in play for an out.'
+                  ),
+                  createElement('p', { style: { color: '#64748b' } }, 'More outs in the sample = more reliable signal. Low-data batters may show "Insufficient data."')
                 )
               )
             ),
 
             // Weakness Confidence
-            createElement('div', { className: 'info-entry' },
+            createElement('div', { className: 'info-entry', id: 'info-entry-weakness-confidence' },
               createElement('div', { className: 'info-entry__icon', style: { background: 'linear-gradient(to right, #ef4444 33%, #facc15 33% 66%, #22c55e 66%)', padding: '0', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'white', fontWeight: '800', letterSpacing: '1px' } }, '●●●'),
               createElement('div', { className: 'info-entry__content' },
                 createElement('div', { className: 'info-entry__title' }, 'Weakness Confidence'),
@@ -1479,12 +1631,18 @@ createElement('div', {},
                   createElement('strong', {}, 'Strict'), ' = critical weaknesses only. ',
                   createElement('strong', {}, 'Balanced'), ' = critical + major. ',
                   createElement('strong', {}, 'Broad'), ' = all identified weaknesses.'
+                ),
+                ...makeInfoExpand(
+                  createElement('p', {}, createElement('strong', {}, 'Broad (red)'), ' — min 3 pitches, score ≤ 60. Shows all zones where the batter has struggled. Good for batters with limited data.'),
+                  createElement('p', {}, createElement('strong', {}, 'Balanced (orange)'), ' — min 7 pitches, score ≤ 35. Confirmed weaknesses with a decent sample. Best for most situations.'),
+                  createElement('p', {}, createElement('strong', {}, 'Strict (green)'), ' — min 10 pitches, score ≤ 20. Only critical, well-established weaknesses. Use when you need maximum confidence.'),
+                  createElement('p', { style: { color: '#64748b' } }, 'Zone score ranges from 0 (most vulnerable) to 60 (least). Higher min-swings = more data required before a zone appears.')
                 )
               )
             ),
 
             // Threats
-            createElement('div', { className: 'info-entry' },
+            createElement('div', { className: 'info-entry', id: 'info-entry-threats' },
               createElement('div', { className: 'info-entry__icon', style: { background: '#ffedd5' } }, '⚠️'),
               createElement('div', { className: 'info-entry__content' },
                 createElement('div', { className: 'info-entry__title' }, 'Threats'),
@@ -1496,19 +1654,29 @@ createElement('div', {},
                     createElement('strong', {}, 'Bunt:'), ' Contact rate and bat control tendency.'
                   ),
                   createElement('span', { className: 'info-threat-row' },
-                    createElement('strong', {}, 'Spray:'), ' Pull hitter, opposite field, or all-fields tendency.'
+                    createElement('strong', {}, 'Spray:'), ' Pull hitter (>60% pull direction), Opposite field (>40% opposite direction), or All fields (neither threshold met). Percentage = share of batted balls in that direction.'
                   )
+                ),
+                ...makeInfoExpand(
+                  createElement('p', {}, createElement('strong', {}, 'Steal — '), 'High = 4+ indicators (stolen base attempts, infield hits, speed data). Moderate = 2–3 indicators. Low = no evidence of above-average speed. Hold the runner carefully when steal is Moderate or High.'),
+                  createElement('p', {}, createElement('strong', {}, 'Bunt — '), 'Based on recorded bunt attempts and contact rates. High = 3+ bunts or a consistent pattern. Corner infielders should be aware and not play deep.'),
+                  createElement('p', {}, createElement('strong', {}, 'Spray — '), 'Pull hitter (>60% to pull side): shift your defense and attack the outer half. Opposite field (>40% oppo): be careful with inside pitches. All fields: balanced — no strong tendency, pitch to weakness.')
                 )
               )
             ),
 
             // First Pitch
-            createElement('div', { className: 'info-entry info-entry--last' },
+            createElement('div', { className: 'info-entry info-entry--last', id: 'info-entry-first-pitch' },
               createElement('div', { className: 'info-entry__icon', style: { background: '#dbeafe' } }, '🔵'),
               createElement('div', { className: 'info-entry__content' },
                 createElement('div', { className: 'info-entry__title' }, 'First-Pitch Approach'),
                 createElement('div', { className: 'info-entry__desc' },
-                  'Shows how often the batter swings at the first pitch. Above 50% = Aggressive. Below = Patient. Use this to decide your opening pitch.'
+                  'Shows how often the batter swings at the first pitch. 70%+ swing rate = Aggressive. 35% or below = Patient. In between = Neutral. Use this to decide your opening pitch.'
+                ),
+                ...makeInfoExpand(
+                  createElement('p', {}, createElement('strong', {}, 'Aggressive (70%+): '), 'He\'s hunting the first pitch. Open with a first-pitch strike — he\'ll often swing early and make weak contact or miss. Don\'t waste it on a ball.'),
+                  createElement('p', {}, createElement('strong', {}, 'Patient (35% or below): '), 'He takes early to get ahead in the count. Get 0-1 without throwing your best pitch — then attack with your out pitch.'),
+                  createElement('p', {}, createElement('strong', {}, 'Neutral: '), 'Unpredictable — he might swing or take depending on the pitch. Read his recent at-bats and adjust mid-game.')
                 )
               )
             )
@@ -1522,7 +1690,7 @@ createElement('div', {},
       ) : null,
       (() => {
         // createTendencies MUST run first — it sets app.allowedZones for the current threshold
-        const tendenciesEl = createTendencies(data.tendencies, data.stats, data.zoneAnalysis, data.powerSequence, this);
+        const tendenciesEl = createTendencies(data.tendencies, data.stats, data.zoneAnalysis, data.powerSequence, data.powerSequenceBreakdown);
 
         // NOW read the freshly-updated app.allowedZones
         const rawZones = data.pitchZones || [];
@@ -1541,7 +1709,7 @@ createElement('div', {},
       })(),
       (!this.isSettingsDocked && this.showSettingsPanel) ? this.renderSettingsPanel(this._rawZoneCount, this._fullyFilteredPitches.length, this._goodCount, this._badCount, this._displayedCount, this._displayedGoodCount, this._displayedBadCount, this._statsTotalPitches) : null,
       (() => {
-        const { el: pitchZoneInner, count: renderedCount, available: availableCount } = createPitchZone(this._fullyFilteredPitches, data.handedness);
+        const { el: pitchZoneInner, count: renderedCount, available: availableCount } = createPitchZone(this._fullyFilteredPitches, data.handedness, data.zoneAnalysis);
         const pitchZoneEl = createElement('div', { className: 'pitch-zone-section' }, pitchZoneInner);
         const batterEl = createBatterGraphic(data.handedness, data.batter, renderedCount, availableCount);
 
@@ -1556,8 +1724,9 @@ createElement('div', {},
   render() {
     const _wsy = (this.currentScreen !== 'loading' && this.currentScreen !== 'error') ? window.scrollY : 0;
     if (this.currentScreen === 'loading' || this.currentScreen === 'error') window.scrollTo(0, 0);
-    // Save sidebar scroll before re-render
+    // Save scroll positions before re-render
     const _savedScroll = (this.container.querySelector('.settings-sidebar') || {}).scrollTop || 0;
+    const _savedModalBodyScroll = (this.container.querySelector('.settings-modal__body') || {}).scrollTop || 0;
     // Clean up existing sidebar and docked state
     document.getElementById('settings-sidebar')?.remove();
     this.container.classList.remove('app-sidebar-docked');
@@ -1580,6 +1749,7 @@ createElement('div', {},
     }
     // Restore sidebar scroll position after layout is resolved
     if (_savedScroll > 0) { requestAnimationFrame(() => { const _ns = this.container.querySelector('.settings-sidebar'); if (_ns) _ns.scrollTop = _savedScroll; }); }
+    if (_savedModalBodyScroll > 0) { requestAnimationFrame(() => { const _nb = this.container.querySelector('.settings-modal__body'); if (_nb) _nb.scrollTop = _savedModalBodyScroll; }); }
     if (_wsy > 0) requestAnimationFrame(() => window.scrollTo(0, _wsy));
   }
 }
