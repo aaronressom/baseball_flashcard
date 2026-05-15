@@ -1057,49 +1057,19 @@ try {
 
 createElement('div', { style: { flex: 1 } },
               createElement('label', { style: { display: 'block', fontSize: '12px', marginBottom: '5px', color: '#666' } }, 'Start Date'),
-              createElement('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } },
-                createElement('input', {
-                  id: 'startDate', type: 'text',
-                  placeholder: 'YYYY-MM-DD',
-                  value: this.lastStartDate || '',
-                  style: { flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid #ccc', cursor: 'text', minWidth: 0 }
-                }),
-                createElement('div', { style: { position: 'relative', display: 'inline-block', flexShrink: 0 } },
-                  createElement('button', {
-                    type: 'button',
-                    title: 'Open calendar',
-                    style: { padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '16px', display: 'block' }
-                  }, '📅'),
-                  createElement('input', {
-                    type: 'date',
-                    style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 1 },
-                    onchange: (e) => { document.getElementById('startDate').value = e.target.value; }
-                  })
-                )
-              )
+              createElement('input', {
+                id: 'startDate', type: 'date',
+                value: this.lastStartDate || '',
+                style: { width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', cursor: 'pointer', fontSize: '14px', boxSizing: 'border-box' }
+              })
             ),
             createElement('div', { style: { flex: 1 } },
               createElement('label', { style: { display: 'block', fontSize: '12px', marginBottom: '5px', color: '#666' } }, 'End Date'),
-              createElement('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } },
-                createElement('input', {
-                  id: 'endDate', type: 'text',
-                  placeholder: 'YYYY-MM-DD',
-                  value: this.lastEndDate || '',
-                  style: { flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid #ccc', cursor: 'text', minWidth: 0 }
-                }),
-                createElement('div', { style: { position: 'relative', display: 'inline-block', flexShrink: 0 } },
-                  createElement('button', {
-                    type: 'button',
-                    title: 'Open calendar',
-                    style: { padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '16px', display: 'block' }
-                  }, '📅'),
-                  createElement('input', {
-                    type: 'date',
-                    style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 1 },
-                    onchange: (e) => { document.getElementById('endDate').value = e.target.value; }
-                  })
-                )
-              )
+              createElement('input', {
+                id: 'endDate', type: 'date',
+                value: this.lastEndDate || '',
+                style: { width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', cursor: 'pointer', fontSize: '14px', boxSizing: 'border-box' }
+              })
             )
           // TODO: end
           ),
